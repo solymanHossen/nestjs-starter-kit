@@ -10,11 +10,7 @@ import { Pool } from 'pg';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         return new Pool({
-          host: configService.get<string>('DB_HOST'),
-          port: configService.get<number>('DB_PORT'),
-          user: configService.get<string>('DB_USER'),
-          password: configService.get<string>('DB_PASS'),
-          database: configService.get<string>('DB_NAME'),
+          connectionString: configService.get<string>('DATABASE_URL'),
           max: 20,
           ssl: configService.get('NODE_ENV') === 'production'
             ? { rejectUnauthorized: false }
@@ -36,7 +32,7 @@ export class DatabaseModule implements OnModuleInit {
       this.logger.log(`✅ DB Connected to [${database}] on ${host}:${port}`);
       client.release();
     } catch (err) {
-      this.logger.error(`❌ DB Connection Failed: ${err.message}`);
+      this.logger.error(`❌ DB Connection Failed: ${(err as Error).message}`);
       process.exit(1);
     }
   }
