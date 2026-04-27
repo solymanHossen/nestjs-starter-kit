@@ -3,6 +3,7 @@ import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -20,6 +21,7 @@ async function bootstrap() {
   const appVersion = configService.get<string>('APP_VERSION') || '1.0.0';
 
   app.use(helmet());
+  app.use(compression());
   app.enableCors();
 
   app.setGlobalPrefix('api');
