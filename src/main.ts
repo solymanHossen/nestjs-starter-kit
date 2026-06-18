@@ -6,6 +6,8 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import morgan from 'morgan';
+import { PrismaClientExceptionFilter } from './common/filters/prisma-exception.filter';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -20,7 +22,12 @@ async function bootstrap() {
   const appVersion = configService.get<string>('APP_VERSION') || '1.0.0';
 
   app.use(helmet());
-  app.enableCors();
+  app.use(morgan(env === 'development' ? 'dev' : 'combined'));
+  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS');
+  app.enableCors({
+    origin: env === 'development' ? '*' : allowedOrigins ? allowedOrigins.split(',') : false,
+    credentials: true,
+  });
 
   app.setGlobalPrefix('api');
 
@@ -29,7 +36,7 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalFilters(new HttpExceptionFilter(), new PrismaClientExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
   app.useGlobalPipes(
