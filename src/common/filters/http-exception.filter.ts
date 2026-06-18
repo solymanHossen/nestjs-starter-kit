@@ -22,10 +22,31 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const exceptionResponse: any =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : { message: (exception as Error).message || 'Internal server error' };
+    let message = 'Something went wrong';
+    let errorName = 'Server Error';
+
+    if (exception instanceof HttpException) {
+      const exceptionResponse = exception.getResponse();
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        const responseObj = exceptionResponse as Record<string, unknown>;
+        if (Array.isArray(responseObj.message)) {
+          message = (responseObj.message[0] as string) || 'Validation failed';
+        } else if (typeof responseObj.message === 'string') {
+          message = responseObj.message;
+        } else {
+          message = JSON.stringify(exceptionResponse);
+        }
+
+        if (typeof responseObj.error === 'string') {
+          errorName = responseObj.error;
+        }
+      }
+    } else if (exception instanceof Error) {
+      message = exception.message || 'Internal server error';
+      errorName = exception.name || 'Error';
+    }
 
     const errorResponse = {
       success: false,
@@ -33,10 +54,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: request.url,
       method: request.method,
-      message: Array.isArray(exceptionResponse.message)
-        ? exceptionResponse.message[0]
-        : exceptionResponse.message || exceptionResponse || 'Something went wrong',
-      error: exceptionResponse.error || (exception as any).name || 'Server Error',
+      message,
+      error: errorName,
     };
 
     this.logger.error(
