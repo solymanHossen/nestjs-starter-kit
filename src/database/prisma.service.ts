@@ -7,20 +7,23 @@ import { Pool } from 'pg';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('PrismaService');
-  private readonly poll: Pool;
-
+  private readonly pool: Pool;
   constructor(configService: ConfigService) {
     const databaseUrl = configService.get<string>('DATABASE_URL');
-    const poolInstance = new Pool({ connectionString: databaseUrl });
+    const poolInstance = new Pool({
+      connectionString: databaseUrl,
+      max: 20,
+    });
+
     const adapter = new PrismaPg(poolInstance);
     super({ adapter });
-    this.poll = poolInstance;
+    this.pool = poolInstance;
   }
 
   async onModuleInit() {
     try {
-      await this.$connect();
-      this.logger.log('✅ DB Connected successfully via Prisma Link!');
+      await this.$queryRaw`SELECT 1`;
+      this.logger.log('✅ DB Connected successfully via Prisma Pg-Adapter!');
     } catch (error) {
       this.logger.error(`❌ DB Connection Failed: ${error.message}`);
       process.exit(1);
@@ -30,7 +33,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleDestroy() {
     try {
       await this.$disconnect();
-      this.logger.log('📉 Prisma database connection closed gracefully.');
+      await this.pool.end();
+      this.logger.log('📉 Prisma client and Pg Pool closed gracefully.');
     } catch (error) {
       this.logger.error(`❌ Error during DB disconnect: ${error.message}`);
     }
