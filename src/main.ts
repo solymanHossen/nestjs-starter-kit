@@ -25,7 +25,7 @@ async function bootstrap() {
   app.use(morgan(env === 'development' ? 'dev' : 'combined'));
   const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS');
   app.enableCors({
-    origin: env === 'development' ? '*' : allowedOrigins ? allowedOrigins.split(',') : false,
+    origin: env === 'development' ? true : allowedOrigins ? allowedOrigins.split(',') : false,
     credentials: true,
   });
 
