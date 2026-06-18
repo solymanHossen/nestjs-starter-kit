@@ -22,7 +22,11 @@ async function bootstrap() {
   const appVersion = configService.get<string>('APP_VERSION') || '1.0.0';
 
   app.use(helmet());
-  app.use(morgan(env === 'development' ? 'dev' : 'combined'));
+  app.use(morgan(env === 'development' ? 'dev' : 'combined', {
+    stream: {
+      write: (message) => logger.log(message.trim()),
+    },
+  }));
   const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS');
   app.enableCors({
     origin: env === 'development' ? true : allowedOrigins ? allowedOrigins.split(',') : false,
@@ -36,7 +40,7 @@ async function bootstrap() {
     defaultVersion: '1',
   });
 
-  app.useGlobalFilters(new HttpExceptionFilter(), new PrismaClientExceptionFilter());
+  app.useGlobalFilters(new PrismaClientExceptionFilter(), new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
   app.useGlobalPipes(
