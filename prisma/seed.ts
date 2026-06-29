@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { UserSeeder } from './seeders/user.seeder';
+import { AppSettingSeeder } from './seeders/app-setting.seeder';
 
 // Initialize connection pool and Pg adapter as required by Prisma 7
 const pool = new Pool({
@@ -19,9 +20,7 @@ async function main() {
   // Register all seeders in desired execution order (dependency order)
   const seeders = [
     new UserSeeder(),
-    // Add other seeders here, e.g.:
-    // new PostSeeder(),
-    // new CommentSeeder(),
+    new AppSettingSeeder(),
   ];
 
   for (const seeder of seeders) {

@@ -1,8 +1,9 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
+import { Logger, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -22,6 +23,7 @@ async function bootstrap() {
   const appVersion = configService.get<string>('APP_VERSION') || '1.0.0';
 
   app.use(helmet());
+  app.use(cookieParser());
   app.use(morgan(env === 'development' ? 'dev' : 'combined', {
     stream: {
       write: (message) => logger.log(message.trim()),
@@ -42,14 +44,6 @@ async function bootstrap() {
 
   app.useGlobalFilters(new PrismaClientExceptionFilter(), new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
-
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
 
   const config = new DocumentBuilder()
     .setTitle(appName)
