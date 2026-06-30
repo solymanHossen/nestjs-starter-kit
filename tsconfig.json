@@ -16,11 +16,28 @@
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
-    "strictNullChecks": true,
-    "noImplicitAny": true,
+
+    // ── Strict mode ────────────────────────────────────────────────────────────
+    // Enables the full suite: strictNullChecks, strictFunctionTypes,
+    // strictPropertyInitialization, noImplicitAny, noImplicitThis,
+    // alwaysStrict, useUnknownInCatchVariables, and more.
+    "strict": true,
+
+    // Additional strictness beyond the strict bundle:
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true,
+
+    // ── Path aliases ────────────────────────────────────────────────────────────
+    // Keeps imports clean across deeply nested modules.
+    // tsconfig-paths is wired in via ts-node for local dev/seed scripts.
+    "paths": {
+      "@common/*": ["src/common/*"],
+      "@auth/*":   ["src/auth/*"],
+      "@database/*": ["src/database/*"],
+      "@health/*": ["src/health/*"]
+    }
   }
 }

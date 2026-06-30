@@ -8,14 +8,17 @@ export class UserSeeder implements Seeder {
   readonly description = 'Seeds one SUPER_ADMIN, five ADMINs, and the remaining regular USERs';
   readonly order = 1;
 
-  // Pre-hashed bcrypt value for 'password123' at cost 10 — avoids CPU-bound hashing during seeding
+  // Pre-hashed bcrypt value for 'password123' at cost 10.
+  // Avoids CPU-bound hashing during seed runs.
+  // WARNING: This is a development-only seed password — never derive real
+  // user passwords from this hash, and never run seeders in production.
   private static readonly PRE_HASHED_PASSWORD =
     '$2b$10$EPf9XpBPHTv.P9Yt5FzDSez5N1N/4YwK27p7Z1L.oRpxZ1W.Y2p2q';
 
   private static readonly TOTAL_USERS = 10;
 
   async seed(prisma: PrismaClient): Promise<void> {
-    console.log('🧹 Cleaning "users" table...');
+    console.info('🧹 Cleaning "users" table...');
     await truncateTable(prisma, 'users');
 
     const users: Prisma.UserCreateManyInput[] = [];
@@ -49,13 +52,13 @@ export class UserSeeder implements Seeder {
       });
     }
 
-    console.log(`📦 Inserting ${users.length} users in chunks...`);
+    console.info(`📦 Inserting ${users.length} users in chunks...`);
     const count = await seedInChunks(prisma.user, users, 5_000);
-    console.log(`✅ Successfully seeded ${count} users.`);
+    console.info(`✅ Successfully seeded ${count} users.`);
   }
 
   async rollback(prisma: PrismaClient): Promise<void> {
     await truncateTable(prisma, 'users');
-    console.log('↩️  UserSeeder rolled back — "users" table truncated.');
+    console.info('↩️  UserSeeder rolled back — "users" table truncated.');
   }
 }

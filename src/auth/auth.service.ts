@@ -37,6 +37,7 @@ export class AuthService {
       (this.configService.get<number>('LOCK_DURATION_MINUTES') ?? 15) * 60_000;
     this.refreshExpiresIn = this.configService.getOrThrow<string>('JWT_REFRESH_EXPIRES_IN');
   }
+  
 
   async register(dto: RegisterDto): Promise<{ message: string; data: SafeUser }> {
     const settings = await this.prisma.appSetting.findUnique({
