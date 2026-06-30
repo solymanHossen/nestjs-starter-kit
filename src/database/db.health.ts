@@ -12,10 +12,11 @@ export class DatabaseHealthIndicator extends HealthIndicator {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       return this.getStatus(key, true);
-    } catch (e) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown database error';
       throw new HealthCheckError(
-        'Database check failed',
-        this.getStatus(key, false, { message: e.message }),
+        'Database health check failed',
+        this.getStatus(key, false, { message }),
       );
     }
   }

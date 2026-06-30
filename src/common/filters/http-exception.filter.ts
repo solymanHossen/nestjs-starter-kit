@@ -6,13 +6,13 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  private readonly logger = new Logger('GLOBAL_ERROR_HANDLER');
+  private readonly logger = new Logger(HttpExceptionFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
@@ -22,31 +22,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    let message = 'Something went wrong';
-    let errorName = 'Server Error';
-
-    if (exception instanceof HttpException) {
-      const exceptionResponse = exception.getResponse();
-      if (typeof exceptionResponse === 'string') {
-        message = exceptionResponse;
-      } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-        const responseObj = exceptionResponse as Record<string, unknown>;
-        if (Array.isArray(responseObj.message)) {
-          message = (responseObj.message[0] as string) || 'Validation failed';
-        } else if (typeof responseObj.message === 'string') {
-          message = responseObj.message;
-        } else {
-          message = JSON.stringify(exceptionResponse);
-        }
-
-        if (typeof responseObj.error === 'string') {
-          errorName = responseObj.error;
-        }
-      }
-    } else if (exception instanceof Error) {
-      message = exception.message || 'Internal server error';
-      errorName = exception.name || 'Error';
-    }
+    const { message, errors } = this.resolveMessage(exception, status);
 
     const errorResponse = {
       success: false,
@@ -55,17 +31,54 @@ export class HttpExceptionFilter implements ExceptionFilter {
       path: request.url,
       method: request.method,
       message,
-      error: errorName,
+      ...(errors.length > 1 && { errors }),
     };
 
-    this.logger.error(
-      `[${request.method}] ${request.url} | Status: ${status} | Message: ${JSON.stringify(errorResponse.message)}`,
-    );
+    const logLine = `[${request.method}] ${request.url} → ${status} | ${message}`;
 
-    if (process.env.NODE_ENV !== 'production' && status === 500) {
-      console.error('Full Error Stack:', exception);
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(logLine, exception instanceof Error ? exception.stack : String(exception));
+    } else {
+      this.logger.warn(logLine);
     }
 
     response.status(status).json(errorResponse);
+  }
+
+  private resolveMessage(
+    exception: unknown,
+    status: number,
+  ): { message: string; errors: string[] } {
+    if (exception instanceof HttpException) {
+      const raw = exception.getResponse();
+
+      if (typeof raw === 'string') {
+        return { message: raw, errors: [] };
+      }
+
+      if (typeof raw === 'object' && raw !== null) {
+        const obj = raw as Record<string, unknown>;
+        const msgField = obj['message'];
+
+        if (Array.isArray(msgField)) {
+          const errors = msgField.map((m) => String(m));
+          return { message: errors[0] ?? 'Validation failed', errors };
+        }
+
+        return {
+          message: typeof msgField === 'string' ? msgField : 'Request failed',
+          errors: [],
+        };
+      }
+    }
+
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      return { message: 'An unexpected error occurred. Please try again later.', errors: [] };
+    }
+
+    return {
+      message: exception instanceof Error ? exception.message : 'Request failed',
+      errors: [],
+    };
   }
 }
