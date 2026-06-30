@@ -12,14 +12,35 @@
     "allowSyntheticDefaultImports": true,
     "target": "ES2023",
     "sourceMap": true,
+    "rootDir": "./src",
     "outDir": "./dist",
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
-    "strictNullChecks": true,
+
+    // ── Strict mode ────────────────────────────────────────────────────────────
+    // Enables the full suite: strictNullChecks, strictFunctionTypes,
+    // strictPropertyInitialization, noImplicitAny, noImplicitThis,
+    // alwaysStrict, useUnknownInCatchVariables, and more.
+    "strict": true,
+
+    // Additional strictness beyond the strict bundle:
+    "strictBindCallApply": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
-    "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
-  }
+    "noUncheckedIndexedAccess": true,
+
+    // ── Path aliases ────────────────────────────────────────────────────────────
+    // Keeps imports clean across deeply nested modules.
+    // tsconfig-paths is wired in via ts-node for local dev/seed scripts.
+    "paths": {
+      "@common/*": ["src/common/*"],
+      "@auth/*":   ["src/auth/*"],
+      "@database/*": ["src/database/*"],
+      "@health/*": ["src/health/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "prisma", "test"]
 }
