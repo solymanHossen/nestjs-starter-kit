@@ -6,13 +6,17 @@ import { UserSeeder } from './seeders/user.seeder';
 import { AppSettingSeeder } from './seeders/app-setting.seeder';
 import type { Seeder } from './seeders/seeder.interface';
 
-// ── Production guard ───────────────────────────────────────────────────────────
+// ── Environment guard (deny-by-default) ───────────────────────────────────────
 // TRUNCATE + CASCADE inside each seeder will wipe all seeded tables.
-// This guard prevents accidental execution against a production database.
-if (process.env.NODE_ENV === 'production') {
+// Deny-by-default: only explicitly allow-listed NODE_ENV values may seed.
+// This catches misconfigured envs ('prod', 'PRODUCTION', 'staging', unset)
+// that would bypass a simple === 'production' check.
+const SEEDING_ALLOWED_ENVS = new Set(['development', 'test']);
+if (!SEEDING_ALLOWED_ENVS.has(process.env.NODE_ENV ?? '')) {
   console.error(
-    '❌ Seeding is blocked in production environments.\n' +
-      '   Set NODE_ENV to "development" or "test" to run seeds.',
+    `❌ Seeding is blocked in this environment.\n` +
+      `   Current NODE_ENV: "${process.env.NODE_ENV ?? '(unset)'}"\n` +
+      `   Seeding is only permitted when NODE_ENV is "development" or "test".`,
   );
   process.exit(1);
 }

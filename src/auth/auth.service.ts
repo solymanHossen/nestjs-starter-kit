@@ -102,8 +102,10 @@ export class AuthService {
     }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const remainingMs = user.lockedUntil.getTime() - Date.now();
+      const remainingMinutes = Math.ceil(remainingMs / 60_000);
       throw new UnauthorizedException(
-        `Account locked due to too many failed attempts. Try again after ${user.lockedUntil.toISOString()}`,
+        `Account temporarily locked. Try again in approximately ${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'}.`,
       );
     }
 
@@ -344,7 +346,7 @@ export class AuthService {
     return createHash('sha256').update(raw).digest('hex');
   }
 
-  parseExpiry(durationStr: string): Date {
+  private parseExpiry(durationStr: string): Date {
     const unit = durationStr.slice(-1);
     const value = parseInt(durationStr.slice(0, -1), 10);
     const multiplierMap: Record<string, number> = {

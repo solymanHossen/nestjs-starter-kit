@@ -14,15 +14,17 @@ export class DatabaseHealthIndicator extends HealthIndicator {
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    let timeoutHandle: NodeJS.Timeout | undefined;
+
     try {
       await Promise.race([
         this.prisma.$queryRaw`SELECT 1`,
-        new Promise<never>((_, reject) =>
-          setTimeout(
+        new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(
             () => reject(new Error(`Database health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
             HEALTH_CHECK_TIMEOUT_MS,
-          ),
-        ),
+          );
+        }),
       ]);
 
       return this.getStatus(key, true);
@@ -38,6 +40,8 @@ export class DatabaseHealthIndicator extends HealthIndicator {
         'Database health check failed',
         this.getStatus(key, false, { message: 'Database is unavailable' }),
       );
+    } finally {
+      clearTimeout(timeoutHandle);
     }
   }
 }

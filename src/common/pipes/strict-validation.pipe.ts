@@ -6,7 +6,10 @@ import { Injectable, ValidationPipe } from '@nestjs/common';
  * - whitelist: strips properties not declared in the DTO class
  * - forbidNonWhitelisted: rejects requests containing unknown properties (400)
  * - transform: coerces plain objects into typed DTO instances
- * - enableImplicitConversion: allows string → number/boolean coercion on @Type decorators
+ *
+ * Implicit conversion is intentionally disabled. Use explicit @Type(() => Number)
+ * or @Type(() => Boolean) on individual DTO fields so type coercion is
+ * opt-in and auditable rather than happening silently across all inputs.
  */
 @Injectable()
 export class StrictValidationPipe extends ValidationPipe {
@@ -15,9 +18,6 @@ export class StrictValidationPipe extends ValidationPipe {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
     });
   }
 }

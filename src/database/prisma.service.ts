@@ -36,9 +36,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       idleTimeoutMillis: idleTimeoutMs,
       // Enforce TLS in production; allow plaintext in local/CI environments.
       ssl: sslEnabled ? { rejectUnauthorized: true } : false,
+      // Prevent silent TCP connection drops from cloud LBs and firewalls.
+      // Without keepalive, idle sockets can be closed mid-flight causing ECONNRESET.
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10_000,
       // Hard-kill any single statement running longer than 30 seconds to prevent
       // runaway queries from exhausting the connection pool.
-      options: '--statement_timeout=30000',
+      // application_name tags each connection in pg_stat_activity for observability.
+      options: '-c statement_timeout=30000 -c application_name=nestjs_app',
     });
 
     const adapter = new PrismaPg(poolInstance);
