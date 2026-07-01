@@ -24,10 +24,8 @@ import {
 import { z } from 'zod';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { RegisterSchema } from './dto/register.dto';
-import type { RegisterDto } from './dto/register.dto';
-import { LoginSchema } from './dto/login.dto';
-import type { LoginDto } from './dto/login.dto';
+import { RegisterSchema, type RegisterDto } from './dto/register.dto';
+import { LoginSchema, type LoginDto } from './dto/login.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { AUTH_THROTTLE_KEY } from '../common/constants/throttler.constants';
 import { Public } from './decorators/public.decorator';
@@ -66,7 +64,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiBody({ schema: z.toJSONSchema(LoginSchema) as unknown as ApiBodySchema })
-  @ApiResponse({ status: 200, description: 'Login successful — refresh token set in httpOnly cookie' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful — refresh token set in httpOnly cookie',
+  })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 401, description: 'Invalid credentials or account locked' })
   async login(
@@ -149,9 +150,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get the currently authenticated user profile' })
   @ApiResponse({ status: 200, description: 'Current user profile' })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
-  getMe(
-    @CurrentUser() user: AuthUser,
-  ): { message: string; data: AuthUser } {
+  getMe(@CurrentUser() user: AuthUser): { message: string; data: AuthUser } {
     return { message: 'Profile retrieved successfully', data: user };
   }
 
@@ -204,7 +203,7 @@ export class AuthController {
   }
 
   private extractDeviceInfo(req: Request): string {
-    return (req.headers['user-agent'] as string | undefined) ?? 'unknown';
+    return req.headers['user-agent'] ?? 'unknown';
   }
 
   private parseMaxAgeMs(durationStr: string): number {

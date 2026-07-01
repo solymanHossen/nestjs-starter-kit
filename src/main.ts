@@ -34,6 +34,7 @@ async function bootstrap(): Promise<void> {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') ?? 3000;
+  const host = configService.get<string>('HOST') ?? '0.0.0.0';
   const env = configService.get<string>('NODE_ENV') ?? 'development';
   const appName = configService.get<string>('APP_NAME') ?? 'Application API';
   const appDesc = configService.get<string>('APP_DESCRIPTION') ?? 'API Documentation';
@@ -141,9 +142,11 @@ async function bootstrap(): Promise<void> {
   }
   // ──────────────────────────────────────────────────────────────────────────
 
-  await app.listen(port);
+  await app.listen(port, host);
 
-  logger.log(`🚀 App running in [${env}] mode on: http://localhost:${port}/api/v1`);
+  logger.log(
+    `🚀 App running in [${env}] mode on: http://localhost:${port}/api/v1 (bound to ${host})`,
+  );
   logger.log(`🏥 Health Check:  http://localhost:${port}/api/v1/health/ready`);
 }
 

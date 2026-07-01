@@ -1,13 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
-import { Request, Response } from 'express';
+import { type Request, type Response } from 'express';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { AuthUser, SafeUser, TokenPair } from './interfaces/auth.interfaces';
+import { type RegisterDto } from './dto/register.dto';
+import { type LoginDto } from './dto/login.dto';
+import { type AuthUser, type SafeUser, type TokenPair } from './interfaces/auth.interfaces';
 
 const mockSafeUser: SafeUser = {
   id: 1,
@@ -57,7 +57,12 @@ const buildMockRequest = (overrides: Partial<Request> = {}): Partial<Request> =>
   ...overrides,
 });
 
-const buildMockResponse = (): Partial<Response> => ({
+// Kept as a plain object (not typed `Partial<Response>`) so `cookie`/`clearCookie`
+// stay function-typed properties rather than the "method" shape Express's Response
+// interface declares — the latter trips @typescript-eslint/unbound-method on the
+// `expect(res.cookie)`/`expect(res.clearCookie)` assertions below. Cast to Response
+// only at the call site when passed into the controller.
+const buildMockResponse = () => ({
   cookie: jest.fn(),
   clearCookie: jest.fn(),
 });
@@ -108,7 +113,7 @@ describe('AuthController', () => {
     it('should set httpOnly cookie and return accessToken + user (never refreshToken in body)', async () => {
       const dto: LoginDto = { email: 'user@example.com', password: 'SecurePass123' };
       const req = buildMockRequest() as Request;
-      const res = buildMockResponse() as Response;
+      const res = buildMockResponse();
 
       mockAuthService.login.mockResolvedValueOnce({
         message: 'Login successful',
@@ -116,7 +121,7 @@ describe('AuthController', () => {
         tokens: mockTokenPair,
       });
 
-      const result = await controller.login(dto, req, res);
+      const result = await controller.login(dto, req, res as unknown as Response);
 
       expect(mockAuthService.login).toHaveBeenCalledWith(dto, 'TestAgent/1.0');
       expect(res.cookie).toHaveBeenCalledWith(
@@ -141,14 +146,14 @@ describe('AuthController', () => {
       const req = buildMockRequest({
         cookies: { refresh_token: 'existing-refresh-token' },
       }) as Request;
-      const res = buildMockResponse() as Response;
+      const res = buildMockResponse();
 
       mockAuthService.refresh.mockResolvedValueOnce({
         message: 'Token refreshed successfully',
         tokens: { ...mockTokenPair, refreshToken: 'new-refresh-token' },
       });
 
-      const result = await controller.refresh(req, res);
+      const result = await controller.refresh(req, res as unknown as Response);
 
       expect(mockAuthService.refresh).toHaveBeenCalledWith(
         'existing-refresh-token',
@@ -164,9 +169,9 @@ describe('AuthController', () => {
 
     it('should throw UnauthorizedException when no refresh_token cookie is present', async () => {
       const req = buildMockRequest({ cookies: {} }) as Request;
-      const res = buildMockResponse() as Response;
+      const res = buildMockResponse();
 
-      await expect(controller.refresh(req, res)).rejects.toThrow(
+      await expect(controller.refresh(req, res as unknown as Response)).rejects.toThrow(
         new UnauthorizedException('No refresh token provided'),
       );
       expect(mockAuthService.refresh).not.toHaveBeenCalled();
@@ -178,11 +183,11 @@ describe('AuthController', () => {
       const req = buildMockRequest({
         cookies: { refresh_token: 'current-token' },
       }) as Request;
-      const res = buildMockResponse() as Response;
+      const res = buildMockResponse();
 
       mockAuthService.logout.mockResolvedValueOnce({ message: 'Logged out successfully' });
 
-      const result = await controller.logout(req, res);
+      const result = await controller.logout(req, res as unknown as Response);
 
       expect(mockAuthService.logout).toHaveBeenCalledWith('current-token');
       expect(res.clearCookie).toHaveBeenCalledWith('refresh_token', {
@@ -193,9 +198,9 @@ describe('AuthController', () => {
 
     it('should still clear cookie even when no refresh_token cookie is present', async () => {
       const req = buildMockRequest({ cookies: {} }) as Request;
-      const res = buildMockResponse() as Response;
+      const res = buildMockResponse();
 
-      const result = await controller.logout(req, res);
+      const result = await controller.logout(req, res as unknown as Response);
 
       expect(mockAuthService.logout).not.toHaveBeenCalled();
       expect(res.clearCookie).toHaveBeenCalledWith('refresh_token', {
@@ -207,10 +212,12 @@ describe('AuthController', () => {
 
   describe('logoutAll()', () => {
     it('should revoke all sessions for current user and clear cookie', async () => {
-      const res = buildMockResponse() as Response;
-      mockAuthService.logoutAll.mockResolvedValueOnce({ message: 'All sessions revoked successfully' });
+      const res = buildMockResponse();
+      mockAuthService.logoutAll.mockResolvedValueOnce({
+        message: 'All sessions revoked successfully',
+      });
 
-      const result = await controller.logoutAll(mockAuthUser, res);
+      const result = await controller.logoutAll(mockAuthUser, res as unknown as Response);
 
       expect(mockAuthService.logoutAll).toHaveBeenCalledWith(mockAuthUser.id);
       expect(res.clearCookie).toHaveBeenCalledWith('refresh_token', {
@@ -241,7 +248,7 @@ describe('AuthController', () => {
         ...buildMockRequest(),
         user: googleProfile,
       } as Request & { user: typeof googleProfile };
-      const res = buildMockResponse() as Response;
+      const res = buildMockResponse();
 
       mockAuthService.googleLogin.mockResolvedValueOnce({
         message: 'Google login successful',
@@ -249,7 +256,7 @@ describe('AuthController', () => {
         tokens: mockTokenPair,
       });
 
-      const result = await controller.googleCallback(req, res);
+      const result = await controller.googleCallback(req, res as unknown as Response);
 
       expect(mockAuthService.googleLogin).toHaveBeenCalledWith(googleProfile, 'TestAgent/1.0');
       expect(res.cookie).toHaveBeenCalledWith(

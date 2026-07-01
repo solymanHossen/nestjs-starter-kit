@@ -21,13 +21,8 @@ export interface ApiSuccessResponse<T> {
 }
 
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiSuccessResponse<T>>
-{
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler<T>,
-  ): Observable<ApiSuccessResponse<T>> {
+export class TransformInterceptor<T> implements NestInterceptor<T, ApiSuccessResponse<T>> {
+  intercept(context: ExecutionContext, next: CallHandler<T>): Observable<ApiSuccessResponse<T>> {
     const httpRequest = context.switchToHttp().getRequest<Request>();
     const httpResponse = context.switchToHttp().getResponse<Response>();
 

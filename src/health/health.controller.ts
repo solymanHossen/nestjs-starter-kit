@@ -76,8 +76,7 @@ export class HealthController {
   async readiness(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.dbIndicator.isHealthy('postgres'),
-      () =>
-        this.memoryIndicator.checkHeap('memory_heap', MEMORY_HEAP_THRESHOLD_BYTES),
+      () => this.memoryIndicator.checkHeap('memory_heap', MEMORY_HEAP_THRESHOLD_BYTES),
     ]);
   }
 
@@ -102,8 +101,7 @@ export class HealthController {
   async check(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.dbIndicator.isHealthy('postgres'),
-      () =>
-        this.memoryIndicator.checkHeap('memory_heap', MEMORY_HEAP_THRESHOLD_BYTES),
+      () => this.memoryIndicator.checkHeap('memory_heap', MEMORY_HEAP_THRESHOLD_BYTES),
     ]);
   }
 }

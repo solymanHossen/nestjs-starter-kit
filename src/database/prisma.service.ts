@@ -23,11 +23,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     const poolMax = configService.get<number>('DB_POOL_MAX') ?? 10;
     const connTimeoutMs = configService.get<number>('DB_CONN_TIMEOUT_MS') ?? 3_000;
     const idleTimeoutMs = configService.get<number>('DB_IDLE_TIMEOUT_MS') ?? 30_000;
+    const lockTimeoutMs = configService.get<number>('DB_LOCK_TIMEOUT_MS') ?? 5_000;
+    const statementTimeoutMs = configService.get<number>('DB_STATEMENT_TIMEOUT_MS') ?? 30_000;
 
     // SSL: honour explicit DB_SSL override; fall back to enabled in production.
     const dbSslOverride = configService.get<boolean>('DB_SSL');
-    const sslEnabled =
-      dbSslOverride !== undefined ? dbSslOverride : nodeEnv === 'production';
+    const sslEnabled = dbSslOverride !== undefined ? dbSslOverride : nodeEnv === 'production';
 
     const poolInstance = new Pool({
       connectionString: databaseUrl,
@@ -40,10 +41,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       // Without keepalive, idle sockets can be closed mid-flight causing ECONNRESET.
       keepAlive: true,
       keepAliveInitialDelayMillis: 10_000,
-      // Hard-kill any single statement running longer than 30 seconds to prevent
-      // runaway queries from exhausting the connection pool.
+      // statement_timeout hard-kills any single statement running too long, preventing
+      // a runaway query from exhausting the connection pool. lock_timeout fails fast
+      // specifically on lock contention — separate and shorter than statement_timeout —
+      // so a query queued behind another transaction's lock doesn't tie up a connection
+      // for the full statement timeout before erroring.
       // application_name tags each connection in pg_stat_activity for observability.
-      options: '-c statement_timeout=30000 -c application_name=nestjs_app',
+      options: `-c statement_timeout=${statementTimeoutMs} -c lock_timeout=${lockTimeoutMs} -c application_name=nestjs_app`,
     });
 
     const adapter = new PrismaPg(poolInstance);

@@ -14,6 +14,12 @@ export const envSchema = z
       .max(65535, 'PORT must be ≤ 65535')
       .default(3000),
 
+    // Interface to bind the HTTP server to. '0.0.0.0' (default) accepts
+    // connections on every interface — required for the app to be reachable
+    // from outside its own container in Docker/Kubernetes. Override to a
+    // specific address (e.g. '127.0.0.1') to restrict to loopback-only.
+    HOST: z.string().default('0.0.0.0'),
+
     // ── Application metadata ────────────────────────────────────────────────
     APP_NAME: z.string().default('Application API'),
     APP_DESCRIPTION: z.string().default('API Documentation'),
@@ -31,6 +37,17 @@ export const envSchema = z
 
     // Milliseconds an idle connection is kept open before being released.
     DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(30000),
+
+    // Milliseconds a query will wait to acquire a row/table lock before
+    // failing fast, separate from — and shorter than — DB_STATEMENT_TIMEOUT_MS.
+    // Without this, a query queued behind a lock occupies a pool connection
+    // for the full statement timeout before erroring, instead of failing
+    // fast on the specific contention.
+    DB_LOCK_TIMEOUT_MS: z.coerce.number().int().min(0).default(5000),
+
+    // Milliseconds before Postgres cancels any single running statement,
+    // preventing a runaway query from exhausting the connection pool.
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30000),
 
     // Set to 'true' to enforce SSL on all DB connections. Defaults to true
     // in production automatically; override with 'false' for dev/staging DBs

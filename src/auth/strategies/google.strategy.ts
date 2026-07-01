@@ -36,7 +36,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   ): void {
     if (!this.isConfigured) {
       return done(
-        new Error('Google OAuth is not configured on this server. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.'),
+        new Error(
+          'Google OAuth is not configured on this server. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.',
+        ),
         false,
       );
     }
