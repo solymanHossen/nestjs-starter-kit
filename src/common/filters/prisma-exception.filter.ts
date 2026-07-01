@@ -1,10 +1,4 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Response, Request } from 'express';
 import type { ErrorResponseShape } from './http-exception.filter';
@@ -51,6 +45,7 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
       method: request.method,
       message,
       errors: [],
+      errorCode,
       data: null,
     };
 
@@ -60,7 +55,7 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
         : exception.constructor.name;
 
     this.logger.warn(
-      `[${request.method}] ${request.url} → ${status} | ${prismaCode} | ${message}`,
+      `[${request.method}] ${request.url} → ${status} | ${prismaCode} (${errorCode}) | ${message}`,
     );
 
     response.status(status).json(errorResponse);
@@ -108,9 +103,7 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
     return this.resolveKnownError(exception);
   }
 
-  private resolveKnownError(
-    exception: Prisma.PrismaClientKnownRequestError,
-  ): ResolvedError {
+  private resolveKnownError(exception: Prisma.PrismaClientKnownRequestError): ResolvedError {
     switch (exception.code) {
       case 'P2002': {
         // Unique constraint violated. Expose the field name(s) for UX, but not
@@ -179,10 +172,7 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
       }
 
       default: {
-        this.logger.error(
-          `Unhandled Prisma error code: ${exception.code}`,
-          exception.stack,
-        );
+        this.logger.error(`Unhandled Prisma error code: ${exception.code}`, exception.stack);
         return {
           status: HttpStatus.INTERNAL_SERVER_ERROR,
           message: 'A database error occurred. Please try again later.',

@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
@@ -11,13 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import {
-  AuthUser,
-  GoogleProfile,
-  JwtAccessPayload,
-  SafeUser,
-  TokenPair,
-} from './interfaces/auth.interfaces';
+import { GoogleProfile, JwtAccessPayload, SafeUser, TokenPair } from './interfaces/auth.interfaces';
 
 @Injectable()
 export class AuthService {
@@ -33,11 +23,9 @@ export class AuthService {
   ) {
     this.bcryptRounds = this.configService.get<number>('BCRYPT_ROUNDS') ?? 12;
     this.maxFailedAttempts = this.configService.get<number>('MAX_FAILED_ATTEMPTS') ?? 5;
-    this.lockDurationMs =
-      (this.configService.get<number>('LOCK_DURATION_MINUTES') ?? 15) * 60_000;
+    this.lockDurationMs = (this.configService.get<number>('LOCK_DURATION_MINUTES') ?? 15) * 60_000;
     this.refreshExpiresIn = this.configService.getOrThrow<string>('JWT_REFRESH_EXPIRES_IN');
   }
-  
 
   async register(dto: RegisterDto): Promise<{ message: string; data: SafeUser }> {
     const settings = await this.prisma.appSetting.findUnique({
@@ -122,6 +110,7 @@ export class AuthService {
       this.prisma.user.update({
         where: { id: user.id },
         data: { failedLoginAttempts: 0, lockedUntil: null },
+        select: { id: true },
       }),
       this.prisma.refreshToken.create({
         data: {
@@ -130,15 +119,11 @@ export class AuthService {
           deviceInfo: deviceInfo.substring(0, 512),
           expiresAt: this.parseExpiry(this.refreshExpiresIn),
         },
+        select: { id: true },
       }),
     ]);
 
-    const {
-      password: _pw,
-      failedLoginAttempts: _fa,
-      lockedUntil: _lu,
-      ...safeUser
-    } = user;
+    const { password: _pw, failedLoginAttempts: _fa, lockedUntil: _lu, ...safeUser } = user;
 
     return { message: 'Login successful', data: safeUser, tokens };
   }
@@ -178,6 +163,7 @@ export class AuthService {
       await this.prisma.refreshToken.update({
         where: { id: storedToken.id },
         data: { revokedAt: new Date() },
+        select: { id: true },
       });
       throw new UnauthorizedException('Refresh token has expired');
     }
@@ -197,6 +183,7 @@ export class AuthService {
       this.prisma.refreshToken.update({
         where: { id: storedToken.id },
         data: { revokedAt: new Date() },
+        select: { id: true },
       }),
       this.prisma.refreshToken.create({
         data: {
@@ -205,6 +192,7 @@ export class AuthService {
           deviceInfo: deviceInfo.substring(0, 512),
           expiresAt: this.parseExpiry(this.refreshExpiresIn),
         },
+        select: { id: true },
       }),
     ]);
 
@@ -286,6 +274,7 @@ export class AuthService {
       await this.prisma.user.update({
         where: { id: existingUser.id },
         data: { googleId: profile.googleId },
+        select: { id: true },
       });
       existingUser = { ...existingUser, googleId: profile.googleId };
     }
@@ -307,6 +296,7 @@ export class AuthService {
         deviceInfo: deviceInfo.substring(0, 512),
         expiresAt: this.parseExpiry(this.refreshExpiresIn),
       },
+      select: { id: true },
     });
 
     const { googleId: _gid, ...safeUser } = existingUser;
@@ -324,14 +314,11 @@ export class AuthService {
         failedLoginAttempts: attempts,
         lockedUntil: shouldLock ? new Date(Date.now() + this.lockDurationMs) : undefined,
       },
+      select: { id: true },
     });
   }
 
-  private async generateTokens(
-    userId: number,
-    email: string,
-    role: Role,
-  ): Promise<TokenPair> {
+  private async generateTokens(userId: number, email: string, role: Role): Promise<TokenPair> {
     const payload: JwtAccessPayload = { sub: userId, email, role };
 
     const [accessToken, refreshToken] = await Promise.all([

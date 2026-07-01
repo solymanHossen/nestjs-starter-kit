@@ -93,6 +93,11 @@ export class StorageController {
     const fileStream = await this.storageService.stream(objectKey);
 
     response.setHeader('Content-Type', resolveContentType(filename));
+    // Helmet's default Cross-Origin-Resource-Policy is `same-origin`, which
+    // blocks cross-origin <img>/<video> loads of this URL regardless of CORS
+    // headers (CORP is enforced independently of CORS for no-cors resource
+    // loads). Scoped to just this route rather than loosened globally in main.ts.
+    response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
 
     fileStream.on('error', (error: Error) => {
       this.logger.error(`Stream failure for object "${objectKey}": ${error.message}`, error.stack);

@@ -8,6 +8,12 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+// Declared as a plain `number` (not `HttpStatus`) so `status >= SERVER_ERROR_THRESHOLD`
+// below doesn't trip @typescript-eslint/no-unsafe-enum-comparison — `status` can be any
+// raw HTTP status code from `exception.getStatus()`, not necessarily one of the finite
+// set of HttpStatus enum members, so it's never safe to type it as the enum itself.
+const SERVER_ERROR_THRESHOLD: number = HttpStatus.INTERNAL_SERVER_ERROR;
+
 export interface ErrorResponseShape {
   success: false;
   statusCode: number;
@@ -16,6 +22,11 @@ export interface ErrorResponseShape {
   method: string;
   message: string;
   errors: string[];
+  /** Machine-readable error identifier for API consumers to branch on
+   * without parsing `message`. Populated by filters that classify errors
+   * into a stable taxonomy (e.g. PrismaClientExceptionFilter); omitted
+   * otherwise. */
+  errorCode?: string;
   data: null;
 }
 
@@ -29,9 +40,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const { message, errors } = this.resolveMessage(exception, status);
 
@@ -48,11 +57,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const logLine = `[${request.method}] ${request.url} → ${status} | ${message}`;
 
-    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
-      this.logger.error(
-        logLine,
-        exception instanceof Error ? exception.stack : String(exception),
-      );
+    if (status >= SERVER_ERROR_THRESHOLD) {
+      this.logger.error(logLine, exception instanceof Error ? exception.stack : String(exception));
     } else {
       this.logger.warn(logLine);
     }
@@ -91,7 +97,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     }
 
-    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (status >= SERVER_ERROR_THRESHOLD) {
       return {
         message: 'An unexpected error occurred. Please try again later.',
         errors: [],

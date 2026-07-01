@@ -14,6 +14,12 @@ export const envSchema = z
       .max(65535, 'PORT must be ≤ 65535')
       .default(3000),
 
+    // Interface to bind the HTTP server to. '0.0.0.0' (default) accepts
+    // connections on every interface — required for the app to be reachable
+    // from outside its own container in Docker/Kubernetes. Override to a
+    // specific address (e.g. '127.0.0.1') to restrict to loopback-only.
+    HOST: z.string().default('0.0.0.0'),
+
     // ── Application metadata ────────────────────────────────────────────────
     APP_NAME: z.string().default('Application API'),
     APP_DESCRIPTION: z.string().default('API Documentation'),
@@ -31,6 +37,17 @@ export const envSchema = z
 
     // Milliseconds an idle connection is kept open before being released.
     DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(30000),
+
+    // Milliseconds a query will wait to acquire a row/table lock before
+    // failing fast, separate from — and shorter than — DB_STATEMENT_TIMEOUT_MS.
+    // Without this, a query queued behind a lock occupies a pool connection
+    // for the full statement timeout before erroring, instead of failing
+    // fast on the specific contention.
+    DB_LOCK_TIMEOUT_MS: z.coerce.number().int().min(0).default(5000),
+
+    // Milliseconds before Postgres cancels any single running statement,
+    // preventing a runaway query from exhausting the connection pool.
+    DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(0).default(30000),
 
     // Set to 'true' to enforce SSL on all DB connections. Defaults to true
     // in production automatically; override with 'false' for dev/staging DBs
@@ -96,6 +113,26 @@ export const envSchema = z
     // Required behind a reverse proxy/CDN in production; falls back to
     // http://localhost:<PORT> when unset — fine for local development only.
     APP_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
+
+    // ── Reverse proxy trust ──────────────────────────────────────────────────
+    // Controls Express's `trust proxy` setting, which governs how `req.ip` (and
+    // therefore the Throttler's per-client tracking) is derived from
+    // X-Forwarded-For. Accepted values:
+    //   'false'            — trust nothing (default); safe when the app is
+    //                        reachable directly, but IP-based rate limiting
+    //                        will bucket every client behind the same NAT/proxy.
+    //   'true'             — trust the nearest hop unconditionally; only safe
+    //                        if you are certain no untrusted client can reach
+    //                        the app directly (spoofable otherwise).
+    //   a positive integer — trust exactly that many hops from the client.
+    //   anything else      — passed through verbatim as an Express subnet/
+    //                        keyword list (e.g. 'loopback, 10.0.0.0/8').
+    TRUST_PROXY: z.string().default('false'),
+
+    // ── Distributed rate-limit storage ───────────────────────────────────────
+    // Required unconditionally, same as DATABASE_URL — the Throttler's storage
+    // must be shared across replicas, so an in-memory fallback is not offered.
+    REDIS_URL: z.string().url('REDIS_URL must be a valid connection URL'),
 
     // ── Storage Infrastructure ──────────────────────────────────────────────
     STORAGE_PROVIDER: z.enum(['local', 'cloud']).default('local'),

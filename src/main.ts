@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger, VersioningType } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -8,15 +9,32 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { EnterpriseLoggerService } from './common/logger/enterprise-logger.service';
+import { CorrelationIdMiddleware } from './common/logger/correlation-id.middleware';
+import { resolveTrustProxy } from './common/config/resolve-trust-proxy.util';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
 
-  // Disable built-in body parser so we can configure limits explicitly.
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // bodyParser: false — disabled so we can configure size limits explicitly below.
+  // bufferLogs: true — queues every framework startup log instead of printing
+  // it through Nest's default console logger; they're flushed through
+  // EnterpriseLoggerService the moment `app.useLogger()` runs below, so no
+  // bootstrap output is lost or logged twice.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+    bufferLogs: true,
+  });
+
+  // ── Unified logging (replaces Nest's default ConsoleLogger app-wide) ────────
+  // Every `Logger` instance anywhere in the app — including ones already
+  // constructed above, and Morgan's stream below — now routes through this
+  // Winston-backed, correlation-id-aware logger automatically.
+  app.useLogger(app.get(EnterpriseLoggerService));
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') ?? 3000;
+  const host = configService.get<string>('HOST') ?? '0.0.0.0';
   const env = configService.get<string>('NODE_ENV') ?? 'development';
   const appName = configService.get<string>('APP_NAME') ?? 'Application API';
   const appDesc = configService.get<string>('APP_DESCRIPTION') ?? 'API Documentation';
@@ -25,6 +43,18 @@ async function bootstrap(): Promise<void> {
 
   // Graceful shutdown: NestJS calls onModuleDestroy/onApplicationShutdown on SIGTERM/SIGINT.
   app.enableShutdownHooks();
+
+  // ── Reverse proxy trust ──────────────────────────────────────────────────
+  // Governs how `req.ip` (and therefore Throttler tracking) is derived from
+  // X-Forwarded-For. Defaults to `false` (trust nothing) unless TRUST_PROXY
+  // is explicitly configured — see env.validation.ts for accepted formats.
+  const trustProxyRaw = configService.get<string>('TRUST_PROXY') ?? 'false';
+  app.set('trust proxy', resolveTrustProxy(trustProxyRaw));
+
+  // ── Correlation ID (must run before Morgan, so every request's log line —
+  // and everything downstream — can read the id via AsyncLocalStorage) ───────
+  const correlationIdMiddleware = app.get(CorrelationIdMiddleware);
+  app.use(correlationIdMiddleware.use.bind(correlationIdMiddleware));
 
   // ── Body parsing with explicit size limits ─────────────────────────────────
   app.use(json({ limit: bodyLimit }));
@@ -44,9 +74,10 @@ async function bootstrap(): Promise<void> {
 
   app.use(cookieParser());
 
+  const httpLogger = new Logger('HTTP');
   app.use(
     morgan(env === 'development' ? 'dev' : 'combined', {
-      stream: { write: (message: string) => logger.log(message.trim()) },
+      stream: { write: (message: string) => httpLogger.log(message.trim()) },
     }),
   );
 
@@ -111,9 +142,11 @@ async function bootstrap(): Promise<void> {
   }
   // ──────────────────────────────────────────────────────────────────────────
 
-  await app.listen(port);
+  await app.listen(port, host);
 
-  logger.log(`🚀 App running in [${env}] mode on: http://localhost:${port}/api/v1`);
+  logger.log(
+    `🚀 App running in [${env}] mode on: http://localhost:${port}/api/v1 (bound to ${host})`,
+  );
   logger.log(`🏥 Health Check:  http://localhost:${port}/api/v1/health/ready`);
 }
 

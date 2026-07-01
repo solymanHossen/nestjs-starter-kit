@@ -24,11 +24,10 @@ import {
 import { z } from 'zod';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { RegisterSchema } from './dto/register.dto';
-import type { RegisterDto } from './dto/register.dto';
-import { LoginSchema } from './dto/login.dto';
-import type { LoginDto } from './dto/login.dto';
+import { RegisterSchema, type RegisterDto } from './dto/register.dto';
+import { LoginSchema, type LoginDto } from './dto/login.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { AUTH_THROTTLE_KEY } from '../common/constants/throttler.constants';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthUser, GoogleProfile, SafeUser } from './interfaces/auth.interfaces';
@@ -45,7 +44,7 @@ export class AuthController {
 
   @Post('register')
   @Public()
-  @Throttle({ auth: { limit: 10, ttl: 900 } })
+  @Throttle({ [AUTH_THROTTLE_KEY]: { limit: 10, ttl: 900_000 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new local user account' })
   @ApiBody({ schema: z.toJSONSchema(RegisterSchema) as unknown as ApiBodySchema })
@@ -61,11 +60,14 @@ export class AuthController {
 
   @Post('login')
   @Public()
-  @Throttle({ auth: { limit: 10, ttl: 900 } })
+  @Throttle({ [AUTH_THROTTLE_KEY]: { limit: 10, ttl: 900_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiBody({ schema: z.toJSONSchema(LoginSchema) as unknown as ApiBodySchema })
-  @ApiResponse({ status: 200, description: 'Login successful — refresh token set in httpOnly cookie' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful — refresh token set in httpOnly cookie',
+  })
   @ApiResponse({ status: 400, description: 'Validation failed' })
   @ApiResponse({ status: 401, description: 'Invalid credentials or account locked' })
   async login(
@@ -86,7 +88,7 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
-  @Throttle({ auth: { limit: 10, ttl: 900 } })
+  @Throttle({ [AUTH_THROTTLE_KEY]: { limit: 10, ttl: 900_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh_token')
   @ApiOperation({ summary: 'Rotate refresh token and obtain new access token' })
@@ -148,9 +150,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get the currently authenticated user profile' })
   @ApiResponse({ status: 200, description: 'Current user profile' })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
-  getMe(
-    @CurrentUser() user: AuthUser,
-  ): { message: string; data: AuthUser } {
+  getMe(@CurrentUser() user: AuthUser): { message: string; data: AuthUser } {
     return { message: 'Profile retrieved successfully', data: user };
   }
 
@@ -203,7 +203,7 @@ export class AuthController {
   }
 
   private extractDeviceInfo(req: Request): string {
-    return (req.headers['user-agent'] as string | undefined) ?? 'unknown';
+    return req.headers['user-agent'] ?? 'unknown';
   }
 
   private parseMaxAgeMs(durationStr: string): number {

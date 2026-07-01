@@ -91,6 +91,10 @@ describe('StorageController', () => {
 
       expect(mockStorageService.stream).toHaveBeenCalledWith('general/abc.png');
       expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'image/png');
+      expect(response.setHeader).toHaveBeenCalledWith(
+        'Cross-Origin-Resource-Policy',
+        'cross-origin',
+      );
       expect(pipeSpy).toHaveBeenCalledWith(response);
     });
   });

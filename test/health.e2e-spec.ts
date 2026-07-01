@@ -1,5 +1,5 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, VersioningType, HttpStatus } from '@nestjs/common';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { type INestApplication, VersioningType, HttpStatus } from '@nestjs/common';
 import { HealthCheckError } from '@nestjs/terminus';
 import request from 'supertest';
 import { AppModule } from './../src/app.module';
@@ -61,10 +61,9 @@ describe('HealthController (e2e)', () => {
     let app: INestApplication;
     const mockDatabaseIndicator = {
       isHealthy: jest.fn().mockImplementation((key: string) => {
-        throw new HealthCheckError(
-          'Database check failed',
-          { [key]: { status: 'down', message: 'Connection timeout' } }
-        );
+        throw new HealthCheckError('Database check failed', {
+          [key]: { status: 'down', message: 'Connection timeout' },
+        });
       }),
     };
 

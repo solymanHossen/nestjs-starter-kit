@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -6,8 +6,8 @@ import { Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../database/prisma.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
+import { type RegisterDto } from './dto/register.dto';
+import { type LoginDto } from './dto/login.dto';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('$2b$12$hashedpassword'),
@@ -203,10 +203,7 @@ describe('AuthService', () => {
         new UnauthorizedException('Invalid credentials'),
       );
       // Timing safety: dummy hash must still run
-      expect(bcrypt.hash).toHaveBeenCalledWith(
-        'timing_safe_dummy_comparison_value',
-        10,
-      );
+      expect(bcrypt.hash).toHaveBeenCalledWith('timing_safe_dummy_comparison_value', 10);
     });
 
     it('should throw UnauthorizedException when password is invalid and increment failedLoginAttempts', async () => {
@@ -219,6 +216,7 @@ describe('AuthService', () => {
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: expect.objectContaining({ failedLoginAttempts: 3 }),
+        select: { id: true },
       });
     });
 
@@ -238,6 +236,7 @@ describe('AuthService', () => {
           failedLoginAttempts: 5,
           lockedUntil: expect.any(Date),
         }),
+        select: { id: true },
       });
     });
 
@@ -328,6 +327,7 @@ describe('AuthService', () => {
       expect(mockPrisma.refreshToken.update).toHaveBeenCalledWith({
         where: { id: 10 },
         data: { revokedAt: expect.any(Date) },
+        select: { id: true },
       });
     });
   });
@@ -413,6 +413,7 @@ describe('AuthService', () => {
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { googleId: 'google-uid-123' },
+        select: { id: true },
       });
     });
 

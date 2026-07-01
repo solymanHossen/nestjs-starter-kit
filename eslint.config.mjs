@@ -21,7 +21,14 @@ export default tseslint.config(
       // import/export syntax awareness in the parser.
       sourceType: 'module',
       parserOptions: {
-        projectService: true,
+        projectService: {
+          // e2e specs live under test/ with their own tsconfig.json (they're
+          // deliberately excluded from the root tsconfig's `include`, which
+          // scopes to `src/**/*` for the actual build). Without this, the
+          // project service can't find a project owning them and fails to
+          // parse the files at all.
+          allowDefaultProject: ['test/*.e2e-spec.ts'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
