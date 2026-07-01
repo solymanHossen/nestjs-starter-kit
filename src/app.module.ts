@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule, type ThrottlerModuleOptions } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
@@ -13,17 +14,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { PrismaClientExceptionFilter } from './common/filters/prisma-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { StrictValidationPipe } from './common/pipes/strict-validation.pipe';
-
-/**
- * Auth-route throttle override — apply with @Throttle({ auth: { limit: 10, ttl: 900 } })
- * on login / register / password-reset endpoints to prevent credential stuffing.
- *
- * Example usage in AuthController:
- *   @Throttle({ auth: { limit: 10, ttl: 900 } })
- *   @Post('login')
- *   login(@Body() dto: LoginDto) { ... }
- */
-export const AUTH_THROTTLE_KEY = 'auth' as const;
+import { LoggerModule } from './common/logger/logger.module';
+import { RedisModule } from './common/redis/redis.module';
+import { RedisService } from './common/redis/redis.service';
+import { AUTH_THROTTLE_KEY, GLOBAL_THROTTLE_KEY } from './common/constants/throttler.constants';
 
 @Module({
   imports: [
@@ -33,24 +27,35 @@ export const AUTH_THROTTLE_KEY = 'auth' as const;
       validate: validateEnv,
     }),
 
-    // ── Multi-tier rate limiting ──────────────────────────────────────────────
+    // ── Multi-tier rate limiting, backed by Redis ──────────────────────────────
     // Tier 1 "global": 100 requests / 10-minute window — applied to all routes.
     // Tier 2 "auth":   10 requests / 15-minute window — opt-in via @Throttle({ auth: { ... } })
     //                  on sensitive endpoints (login, register, password-reset).
-    // Note: ttl values are in SECONDS per @nestjs/throttler v6+.
-    ThrottlerModule.forRoot([
-      {
-        name: 'global',
-        ttl: 600,
-        limit: 100,
-      },
-      {
-        name: AUTH_THROTTLE_KEY,
-        ttl: 900,
-        limit: 10,
-      },
-    ]),
+    // IMPORTANT — verified against the installed @nestjs/throttler@6.5.0
+    // source and confirmed live against Redis via MONITOR: `ttl` and
+    // `blockDuration` are in MILLISECONDS, not seconds. (The package's own
+    // in-memory ThrottlerStorageService passes `ttl` straight into
+    // `setTimeout()`, and this Redis-backed storage passes it straight into
+    // `PEXPIRE`/`PX` — both millisecond-based.) Configuring these in seconds
+    // silently shrinks a "10 requests / 15 minutes" window down to
+    // "10 requests / 900 milliseconds", defeating the limiter almost entirely.
+    // Storage is Redis (not the package default in-memory map) so every
+    // replica behind a load balancer enforces the same limit against the
+    // same shared counters, instead of each instance tracking its own.
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [RedisService],
+      useFactory: (redisService: RedisService): ThrottlerModuleOptions => ({
+        throttlers: [
+          { name: GLOBAL_THROTTLE_KEY, ttl: 600_000, limit: 100 },
+          { name: AUTH_THROTTLE_KEY, ttl: 900_000, limit: 10 },
+        ],
+        storage: new ThrottlerStorageRedisService(redisService.client),
+      }),
+    }),
 
+    RedisModule,
+    LoggerModule,
     DatabaseModule,
     HealthModule,
     AuthModule,

@@ -5,15 +5,29 @@ import {
   HealthCheckResult,
   MemoryHealthIndicator,
 } from '@nestjs/terminus';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { DatabaseHealthIndicator } from '../database/db.health';
 import { Public } from '../auth/decorators/public.decorator';
+import { AUTH_THROTTLE_KEY, GLOBAL_THROTTLE_KEY } from '../common/constants/throttler.constants';
 
 /** Memory heap threshold above which the readiness probe reports degraded. */
 const MEMORY_HEAP_THRESHOLD_BYTES = 300 * 1024 * 1024; // 300 MB
 
 @ApiTags('System')
 @Controller('health')
+// The global ThrottlerGuard's storage is Redis-backed (see AppModule) and does
+// not catch storage errors — a Redis outage would otherwise make every health
+// check throw a 500 instead of reporting the actual (unrelated) status. Since
+// Kubernetes kills and restarts pods that fail their liveness probe, that
+// would turn a transient Redis blip into a full outage via crash-looping.
+// Health endpoints must never depend on infrastructure they don't check.
+//
+// Both named tiers must be listed explicitly — bare @SkipThrottle() only sets
+// `{ default: true }`, which is a no-op here since neither configured
+// throttler is named "default" (verified live: omitting either name left
+// X-RateLimit-* headers, and enforcement, active on this controller).
+@SkipThrottle({ [GLOBAL_THROTTLE_KEY]: true, [AUTH_THROTTLE_KEY]: true })
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,

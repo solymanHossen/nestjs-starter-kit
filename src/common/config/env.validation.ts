@@ -97,6 +97,26 @@ export const envSchema = z
     // http://localhost:<PORT> when unset — fine for local development only.
     APP_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
 
+    // ── Reverse proxy trust ──────────────────────────────────────────────────
+    // Controls Express's `trust proxy` setting, which governs how `req.ip` (and
+    // therefore the Throttler's per-client tracking) is derived from
+    // X-Forwarded-For. Accepted values:
+    //   'false'            — trust nothing (default); safe when the app is
+    //                        reachable directly, but IP-based rate limiting
+    //                        will bucket every client behind the same NAT/proxy.
+    //   'true'             — trust the nearest hop unconditionally; only safe
+    //                        if you are certain no untrusted client can reach
+    //                        the app directly (spoofable otherwise).
+    //   a positive integer — trust exactly that many hops from the client.
+    //   anything else      — passed through verbatim as an Express subnet/
+    //                        keyword list (e.g. 'loopback, 10.0.0.0/8').
+    TRUST_PROXY: z.string().default('false'),
+
+    // ── Distributed rate-limit storage ───────────────────────────────────────
+    // Required unconditionally, same as DATABASE_URL — the Throttler's storage
+    // must be shared across replicas, so an in-memory fallback is not offered.
+    REDIS_URL: z.string().url('REDIS_URL must be a valid connection URL'),
+
     // ── Storage Infrastructure ──────────────────────────────────────────────
     STORAGE_PROVIDER: z.enum(['local', 'cloud']).default('local'),
     LOCAL_STORAGE_DEST: z.string().default('./storage'),
