@@ -56,3 +56,7 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+# Local storage provider's default upload destination (LOCAL_STORAGE_DEST) —
+# user-uploaded files must never be committed to source control.
+/storage

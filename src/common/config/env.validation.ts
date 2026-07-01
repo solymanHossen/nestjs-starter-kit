@@ -2,101 +2,157 @@ import { z } from 'zod';
 
 const originPattern = /^(\*|https?:\/\/[^\s,]+)$/;
 
-export const envSchema = z.object({
-  // ── Runtime ──────────────────────────────────────────────────────────────
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+export const envSchema = z
+  .object({
+    // ── Runtime ──────────────────────────────────────────────────────────────
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
-  PORT: z.coerce
-    .number()
-    .int()
-    .min(1, 'PORT must be ≥ 1')
-    .max(65535, 'PORT must be ≤ 65535')
-    .default(3000),
+    PORT: z.coerce
+      .number()
+      .int()
+      .min(1, 'PORT must be ≥ 1')
+      .max(65535, 'PORT must be ≤ 65535')
+      .default(3000),
 
-  // ── Application metadata ────────────────────────────────────────────────
-  APP_NAME: z.string().default('Application API'),
-  APP_DESCRIPTION: z.string().default('API Documentation'),
-  APP_VERSION: z.string().default('1.0.0'),
+    // ── Application metadata ────────────────────────────────────────────────
+    APP_NAME: z.string().default('Application API'),
+    APP_DESCRIPTION: z.string().default('API Documentation'),
+    APP_VERSION: z.string().default('1.0.0'),
 
-  // ── Database ────────────────────────────────────────────────────────────
-  DATABASE_URL: z.string().url('DATABASE_URL must be a valid connection URL'),
+    // ── Database ────────────────────────────────────────────────────────────
+    DATABASE_URL: z.string().url('DATABASE_URL must be a valid connection URL'),
 
-  // Max connections in the pg.Pool. Size proportionally to PostgreSQL's
-  // max_connections divided by the number of app replicas.
-  DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    // Max connections in the pg.Pool. Size proportionally to PostgreSQL's
+    // max_connections divided by the number of app replicas.
+    DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
 
-  // Milliseconds to wait before giving up acquiring a new connection from the pool.
-  DB_CONN_TIMEOUT_MS: z.coerce.number().int().min(0).default(3000),
+    // Milliseconds to wait before giving up acquiring a new connection from the pool.
+    DB_CONN_TIMEOUT_MS: z.coerce.number().int().min(0).default(3000),
 
-  // Milliseconds an idle connection is kept open before being released.
-  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(30000),
+    // Milliseconds an idle connection is kept open before being released.
+    DB_IDLE_TIMEOUT_MS: z.coerce.number().int().min(0).default(30000),
 
-  // Set to 'true' to enforce SSL on all DB connections. Defaults to true
-  // in production automatically; override with 'false' for dev/staging DBs
-  // that run without SSL (e.g. local Docker Postgres).
-  DB_SSL: z
-    .preprocess(
+    // Set to 'true' to enforce SSL on all DB connections. Defaults to true
+    // in production automatically; override with 'false' for dev/staging DBs
+    // that run without SSL (e.g. local Docker Postgres).
+    DB_SSL: z.preprocess(
       (v) => (v === 'true' ? true : v === 'false' ? false : v),
       z.boolean().optional(),
     ),
 
-  // ── Request limits ──────────────────────────────────────────────────────
-  // Express body-parser limit — expressed as a byte string (e.g. '10mb', '512kb').
-  BODY_SIZE_LIMIT: z.string().default('10mb'),
+    // ── Request limits ──────────────────────────────────────────────────────
+    // Express body-parser limit — expressed as a byte string (e.g. '10mb', '512kb').
+    BODY_SIZE_LIMIT: z.string().default('10mb'),
 
-  // ── CORS ────────────────────────────────────────────────────────────────
-  // Comma-separated list of allowed origins, each must be a valid URL or '*'.
-  // Example: https://app.example.com,https://admin.example.com
-  ALLOWED_ORIGINS: z
-    .string()
-    .optional()
-    .refine(
-      (val) => {
-        if (!val) return true;
-        return val
-          .split(',')
-          .map((o) => o.trim())
-          .every((origin) => originPattern.test(origin));
-      },
-      {
-        message:
-          'ALLOWED_ORIGINS must be a comma-separated list of valid URLs (e.g. https://app.com) or the wildcard "*"',
-      },
+    // ── CORS ────────────────────────────────────────────────────────────────
+    // Comma-separated list of allowed origins, each must be a valid URL or '*'.
+    // Example: https://app.example.com,https://admin.example.com
+    ALLOWED_ORIGINS: z
+      .string()
+      .optional()
+      .refine(
+        (val) => {
+          if (!val) return true;
+          return val
+            .split(',')
+            .map((o) => o.trim())
+            .every((origin) => originPattern.test(origin));
+        },
+        {
+          message:
+            'ALLOWED_ORIGINS must be a comma-separated list of valid URLs (e.g. https://app.com) or the wildcard "*"',
+        },
+      ),
+
+    // ── JWT ─────────────────────────────────────────────────────────────────
+    JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
+    JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
+    JWT_ACCESS_EXPIRES_IN: z
+      .string()
+      .regex(/^\d+[smhd]$/, 'JWT_ACCESS_EXPIRES_IN must match pattern: <number><s|m|h|d>')
+      .default('15m'),
+    JWT_REFRESH_EXPIRES_IN: z
+      .string()
+      .regex(/^\d+[smhd]$/, 'JWT_REFRESH_EXPIRES_IN must match pattern: <number><s|m|h|d>')
+      .default('7d'),
+
+    // ── Bcrypt ──────────────────────────────────────────────────────────────
+    BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
+
+    // ── Account security ────────────────────────────────────────────────────
+    MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
+    LOCK_DURATION_MINUTES: z.coerce.number().int().min(1).default(15),
+
+    // ── Google OAuth (optional) ─────────────────────────────────────────────
+    GOOGLE_CLIENT_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    GOOGLE_CLIENT_SECRET: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    GOOGLE_CALLBACK_URL: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().url().optional(),
     ),
 
-  // ── JWT ─────────────────────────────────────────────────────────────────
-  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
-  JWT_ACCESS_EXPIRES_IN: z
-    .string()
-    .regex(/^\d+[smhd]$/, 'JWT_ACCESS_EXPIRES_IN must match pattern: <number><s|m|h|d>')
-    .default('15m'),
-  JWT_REFRESH_EXPIRES_IN: z
-    .string()
-    .regex(/^\d+[smhd]$/, 'JWT_REFRESH_EXPIRES_IN must match pattern: <number><s|m|h|d>')
-    .default('7d'),
+    // ── Public app URL ──────────────────────────────────────────────────────
+    // Used to build absolute links back to this API (e.g. file streaming URLs).
+    // Required behind a reverse proxy/CDN in production; falls back to
+    // http://localhost:<PORT> when unset — fine for local development only.
+    APP_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
 
-  // ── Bcrypt ──────────────────────────────────────────────────────────────
-  BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
+    // ── Storage Infrastructure ──────────────────────────────────────────────
+    STORAGE_PROVIDER: z.enum(['local', 'cloud']).default('local'),
+    LOCAL_STORAGE_DEST: z.string().default('./storage'),
 
-  // ── Account security ────────────────────────────────────────────────────
-  MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
-  LOCK_DURATION_MINUTES: z.coerce.number().int().min(1).default(15),
+    // Hard ceiling on a single uploaded file, enforced by Multer before the
+    // payload is fully buffered into memory.
+    STORAGE_MAX_FILE_SIZE_MB: z.coerce.number().int().min(1).max(1024).default(10),
 
-  // ── Google OAuth (optional) ─────────────────────────────────────────────
-  GOOGLE_CLIENT_ID: z.preprocess(
-    (v) => (v === '' ? undefined : v),
-    z.string().optional(),
-  ),
-  GOOGLE_CLIENT_SECRET: z.preprocess(
-    (v) => (v === '' ? undefined : v),
-    z.string().optional(),
-  ),
-  GOOGLE_CALLBACK_URL: z.preprocess(
-    (v) => (v === '' ? undefined : v),
-    z.string().url().optional(),
-  ),
-});
+    // Comma-separated MIME allow-list applied at the Multer layer. An empty
+    // string disables the check — not recommended outside of trusted internal tools.
+    STORAGE_ALLOWED_MIME_TYPES: z
+      .string()
+      .default('image/jpeg,image/png,image/webp,image/gif,application/pdf'),
+
+    STORAGE_AWS_ACCESS_KEY_ID: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().optional(),
+    ),
+    STORAGE_AWS_SECRET_ACCESS_KEY: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().optional(),
+    ),
+    STORAGE_AWS_REGION: z.string().default('us-east-1'),
+    STORAGE_AWS_BUCKET_NAME: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    STORAGE_AWS_ENDPOINT: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().url().optional(),
+    ),
+  })
+  .superRefine((config, ctx) => {
+    // Cross-field guard: the S3 provider cannot construct a client without these,
+    // and failing fast at startup beats a 500 on the first upload request.
+    if (config.STORAGE_PROVIDER !== 'cloud') return;
+
+    if (!config.STORAGE_AWS_ACCESS_KEY_ID) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['STORAGE_AWS_ACCESS_KEY_ID'],
+        message: 'STORAGE_AWS_ACCESS_KEY_ID is required when STORAGE_PROVIDER=cloud',
+      });
+    }
+    if (!config.STORAGE_AWS_SECRET_ACCESS_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['STORAGE_AWS_SECRET_ACCESS_KEY'],
+        message: 'STORAGE_AWS_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER=cloud',
+      });
+    }
+    if (!config.STORAGE_AWS_BUCKET_NAME) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['STORAGE_AWS_BUCKET_NAME'],
+        message: 'STORAGE_AWS_BUCKET_NAME is required when STORAGE_PROVIDER=cloud',
+      });
+    }
+  });
 
 export type EnvConfig = z.infer<typeof envSchema>;
 

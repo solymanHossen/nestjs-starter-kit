@@ -30,6 +30,7 @@
     "audit:sec": "npm audit --audit-level=high"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1077.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -69,6 +70,7 @@
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.1.0",
     "@types/node": "^24.0.0",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/passport-jwt": "^4.0.1",
@@ -91,6 +93,9 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
+  },
+  "overrides": {
+    "multer": "^2.2.0"
   },
   "jest": {
     "moduleFileExtensions": [

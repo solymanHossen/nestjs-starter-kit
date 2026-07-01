@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import {
   ApiBearerAuth,
@@ -44,6 +45,7 @@ export class AuthController {
 
   @Post('register')
   @Public()
+  @Throttle({ auth: { limit: 10, ttl: 900 } })
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new local user account' })
   @ApiBody({ schema: z.toJSONSchema(RegisterSchema) as unknown as ApiBodySchema })
@@ -59,6 +61,7 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  @Throttle({ auth: { limit: 10, ttl: 900 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiBody({ schema: z.toJSONSchema(LoginSchema) as unknown as ApiBodySchema })
@@ -83,6 +86,7 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
+  @Throttle({ auth: { limit: 10, ttl: 900 } })
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh_token')
   @ApiOperation({ summary: 'Rotate refresh token and obtain new access token' })

@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { StorageModule } from './storage/storage.module';
 import { validateEnv } from './common/config/env.validation';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -53,6 +54,7 @@ export const AUTH_THROTTLE_KEY = 'auth' as const;
     DatabaseModule,
     HealthModule,
     AuthModule,
+    StorageModule,
   ],
   providers: [
     // ── Global validation pipe ────────────────────────────────────────────────
