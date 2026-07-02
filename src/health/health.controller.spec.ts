@@ -66,10 +66,15 @@ describe('HealthController', () => {
       const checks = mockHealthCheckService.check.mock.calls[0][0] as Array<() => unknown>;
       expect(checks).toHaveLength(2);
 
-      await checks[0]();
+      const [dbCheck, memoryCheck] = checks;
+      if (!dbCheck || !memoryCheck) {
+        throw new Error('Expected exactly two health checks to be registered');
+      }
+
+      await dbCheck();
       expect(mockDbIndicator.isHealthy).toHaveBeenCalledWith('postgres');
 
-      await checks[1]();
+      await memoryCheck();
       expect(mockMemoryIndicator.checkHeap).toHaveBeenCalledWith('memory_heap', 300 * 1024 * 1024);
     });
   });
