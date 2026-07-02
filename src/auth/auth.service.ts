@@ -6,8 +6,11 @@ import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { GoogleProfile, JwtAccessPayload, SafeUser, TokenPair } from './interfaces/auth.interfaces';
 
 @Injectable()
@@ -16,17 +19,26 @@ export class AuthService {
   private readonly maxFailedAttempts: number;
   private readonly lockDurationMs: number;
   private readonly refreshExpiresIn: string;
+  private readonly passwordResetTtlMs: number;
+  private readonly appUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly settingsService: SettingsService,
+    private readonly mailService: MailService,
   ) {
     this.bcryptRounds = this.configService.get<number>('BCRYPT_ROUNDS') ?? 12;
     this.maxFailedAttempts = this.configService.get<number>('MAX_FAILED_ATTEMPTS') ?? 5;
     this.lockDurationMs = (this.configService.get<number>('LOCK_DURATION_MINUTES') ?? 15) * 60_000;
     this.refreshExpiresIn = this.configService.getOrThrow<string>('JWT_REFRESH_EXPIRES_IN');
+    this.passwordResetTtlMs =
+      (this.configService.get<number>('PASSWORD_RESET_TOKEN_EXPIRES_MINUTES') ?? 30) * 60_000;
+
+    const port = this.configService.get<number>('PORT') ?? 3000;
+    const configuredAppUrl = this.configService.get<string>('APP_URL');
+    this.appUrl = (configuredAppUrl ?? `http://localhost:${port}`).replace(/\/+$/, '');
   }
 
   async register(dto: RegisterDto): Promise<{ message: string; data: SafeUser }> {
@@ -298,6 +310,78 @@ export class AuthService {
     const { googleId: _gid, ...safeUser } = existingUser;
 
     return { message: 'Google login successful', data: safeUser, tokens };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    // Identical response whether or not the email is registered — prevents
+    // account enumeration via this endpoint.
+    const genericResponse = {
+      message: 'If an account with that email exists, a password reset link has been sent.',
+    };
+
+    const user = await this.prisma.user.findFirst({
+      where: { email: dto.email.toLowerCase(), deletedAt: null, isActive: true },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return genericResponse;
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        tokenHash: this.hashToken(rawToken),
+        userId: user.id,
+        expiresAt: new Date(Date.now() + this.passwordResetTtlMs),
+      },
+      select: { id: true },
+    });
+
+    // Points at a frontend route — this backend-only starter kit doesn't ship
+    // a UI for it, so downstream consumers should adjust the path to their
+    // own SPA's reset-password screen.
+    const resetUrl = `${this.appUrl}/reset-password?token=${rawToken}`;
+    await this.mailService.sendPasswordResetEmail(user.email, resetUrl);
+
+    return genericResponse;
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+    const tokenHash = this.hashToken(dto.token);
+
+    const storedToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      select: { id: true, userId: true, expiresAt: true, usedAt: true },
+    });
+
+    if (!storedToken || storedToken.usedAt !== null || storedToken.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired password reset token');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, this.bcryptRounds);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: storedToken.userId },
+        data: { password: passwordHash, failedLoginAttempts: 0, lockedUntil: null },
+        select: { id: true },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: storedToken.id },
+        data: { usedAt: new Date() },
+        select: { id: true },
+      }),
+      // Password changed — invalidate every existing session so a leaked/stolen
+      // refresh token can no longer be used to stay signed in as this user.
+      this.prisma.refreshToken.updateMany({
+        where: { userId: storedToken.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Password has been reset successfully' };
   }
 
   private async recordFailedAttempt(userId: number, currentAttempts: number): Promise<void> {

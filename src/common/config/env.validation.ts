@@ -99,6 +99,25 @@ export const envSchema = z
     // ── Account security ────────────────────────────────────────────────────
     MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
     LOCK_DURATION_MINUTES: z.coerce.number().int().min(1).default(15),
+    PASSWORD_RESET_TOKEN_EXPIRES_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
+
+    // ── Outbound mail ────────────────────────────────────────────────────────
+    // 'console' (default) logs the email instead of sending it — zero-config,
+    // works out of the box in local dev/CI. 'smtp' sends for real via nodemailer
+    // and requires the SMTP_* variables below.
+    MAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
+    MAIL_FROM: z.string().default('no-reply@example.com'),
+    SMTP_HOST: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    SMTP_PORT: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.coerce.number().int().min(1).max(65535).optional(),
+    ),
+    SMTP_USER: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    SMTP_PASSWORD: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+    SMTP_SECURE: z.preprocess(
+      (v) => (v === 'true' ? true : v === 'false' ? false : v),
+      z.boolean().optional(),
+    ),
 
     // ── Google OAuth (optional) ─────────────────────────────────────────────
     GOOGLE_CLIENT_ID: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
@@ -187,6 +206,40 @@ export const envSchema = z
         code: 'custom',
         path: ['STORAGE_AWS_BUCKET_NAME'],
         message: 'STORAGE_AWS_BUCKET_NAME is required when STORAGE_PROVIDER=cloud',
+      });
+    }
+  })
+  .superRefine((config, ctx) => {
+    // Cross-field guard: SmtpMailProvider cannot construct a transport without these,
+    // and failing fast at startup beats a 500 on the first password-reset request.
+    if (config.MAIL_PROVIDER !== 'smtp') return;
+
+    if (!config.SMTP_HOST) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMTP_HOST'],
+        message: 'SMTP_HOST is required when MAIL_PROVIDER=smtp',
+      });
+    }
+    if (!config.SMTP_PORT) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMTP_PORT'],
+        message: 'SMTP_PORT is required when MAIL_PROVIDER=smtp',
+      });
+    }
+    if (!config.SMTP_USER) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMTP_USER'],
+        message: 'SMTP_USER is required when MAIL_PROVIDER=smtp',
+      });
+    }
+    if (!config.SMTP_PASSWORD) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMTP_PASSWORD'],
+        message: 'SMTP_PASSWORD is required when MAIL_PROVIDER=smtp',
       });
     }
   });

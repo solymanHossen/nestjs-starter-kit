@@ -26,6 +26,8 @@ import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterSchema, type RegisterDto } from './dto/register.dto';
 import { LoginSchema, type LoginDto } from './dto/login.dto';
+import { ForgotPasswordSchema, type ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordSchema, type ResetPasswordDto } from './dto/reset-password.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { AUTH_THROTTLE_KEY } from '../common/constants/throttler.constants';
 import { Public } from './decorators/public.decorator';
@@ -84,6 +86,38 @@ export class AuthController {
       message: result.message,
       data: { accessToken: result.tokens.accessToken, user: result.data },
     };
+  }
+
+  @Post('forgot-password')
+  @Public()
+  @Throttle({ [AUTH_THROTTLE_KEY]: { limit: 10, ttl: 900_000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password reset link by email' })
+  @ApiBody({ schema: z.toJSONSchema(ForgotPasswordSchema) as unknown as ApiBodySchema })
+  @ApiResponse({
+    status: 200,
+    description: 'Generic success response — sent whether or not the email is registered',
+  })
+  @ApiResponse({ status: 400, description: 'Validation failed' })
+  async forgotPassword(
+    @Body(new ZodValidationPipe(ForgotPasswordSchema)) dto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @Public()
+  @Throttle({ [AUTH_THROTTLE_KEY]: { limit: 10, ttl: 900_000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using a token issued by forgot-password' })
+  @ApiBody({ schema: z.toJSONSchema(ResetPasswordSchema) as unknown as ApiBodySchema })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 400, description: 'Validation failed' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired reset token' })
+  async resetPassword(
+    @Body(new ZodValidationPipe(ResetPasswordSchema)) dto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.authService.resetPassword(dto);
   }
 
   @Post('refresh')
