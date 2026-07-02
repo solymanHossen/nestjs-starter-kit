@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 const originPattern = /^(\*|https?:\/\/[^\s,]+)$/;
 
+// Semantic Versioning 2.0.0 core grammar (major.minor.patch), with optional
+// -prerelease and +build metadata suffixes (e.g. "1.4.2-beta.1+build.7").
+const semverPattern =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
 export const envSchema = z
   .object({
     // ── Runtime ──────────────────────────────────────────────────────────────
@@ -21,9 +26,19 @@ export const envSchema = z
     HOST: z.string().default('0.0.0.0'),
 
     // ── Application metadata ────────────────────────────────────────────────
-    APP_NAME: z.string().default('Application API'),
-    APP_DESCRIPTION: z.string().default('API Documentation'),
-    APP_VERSION: z.string().default('1.0.0'),
+    // Backs AppIdentityService (src/common/config/app-identity.service.ts) —
+    // the single source of truth every other module (Swagger docs, outbound
+    // email templates, future audit logs) reads app name/description/version
+    // from, instead of each hardcoding its own copy.
+    APP_NAME: z.string().min(1, 'APP_NAME must not be empty').default('Application API'),
+    APP_DESCRIPTION: z
+      .string()
+      .min(1, 'APP_DESCRIPTION must not be empty')
+      .default('API Documentation'),
+    APP_VERSION: z
+      .string()
+      .regex(semverPattern, 'APP_VERSION must be a valid semantic version (e.g. 1.0.0)')
+      .default('1.0.0'),
 
     // ── Database ────────────────────────────────────────────────────────────
     DATABASE_URL: z.string().url('DATABASE_URL must be a valid connection URL'),

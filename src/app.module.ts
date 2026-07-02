@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { StorageModule } from './storage/storage.module';
 import { SettingsModule } from './settings/settings.module';
 import { MailModule } from './mail/mail.module';
+import { AppIdentityModule } from './common/config/app-identity.module';
 import { validateEnv } from './common/config/env.validation';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -56,6 +57,7 @@ import { AUTH_THROTTLE_KEY, GLOBAL_THROTTLE_KEY } from './common/constants/throt
       }),
     }),
 
+    AppIdentityModule,
     RedisModule,
     LoggerModule,
     DatabaseModule,
