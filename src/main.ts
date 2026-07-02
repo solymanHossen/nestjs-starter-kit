@@ -12,6 +12,7 @@ import { AppModule } from './app.module';
 import { EnterpriseLoggerService } from './common/logger/enterprise-logger.service';
 import { CorrelationIdMiddleware } from './common/logger/correlation-id.middleware';
 import { resolveTrustProxy } from './common/config/resolve-trust-proxy.util';
+import { AppIdentityService } from './common/config/app-identity.service';
 
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
@@ -36,10 +37,11 @@ async function bootstrap(): Promise<void> {
   const port = configService.get<number>('PORT') ?? 3000;
   const host = configService.get<string>('HOST') ?? '0.0.0.0';
   const env = configService.get<string>('NODE_ENV') ?? 'development';
-  const appName = configService.get<string>('APP_NAME') ?? 'Application API';
-  const appDesc = configService.get<string>('APP_DESCRIPTION') ?? 'API Documentation';
-  const appVersion = configService.get<string>('APP_VERSION') ?? '1.0.0';
   const bodyLimit = configService.get<string>('BODY_SIZE_LIMIT') ?? '10mb';
+
+  // Single source of truth for app name/description/version — see
+  // AppIdentityService for why this replaces reading APP_* keys here directly.
+  const appIdentity = app.get(AppIdentityService);
 
   // Graceful shutdown: NestJS calls onModuleDestroy/onApplicationShutdown on SIGTERM/SIGINT.
   app.enableShutdownHooks();
@@ -99,7 +101,7 @@ async function bootstrap(): Promise<void> {
   // ── Swagger (non-production only) ──────────────────────────────────────────
   if (env !== 'production') {
     const swaggerDescription =
-      `${appDesc}\n\n` +
+      `${appIdentity.description}\n\n` +
       `## How to authenticate\n\n` +
       `1. Call **POST /api/v1/auth/register** or **POST /api/v1/auth/login**.\n` +
       `2. Copy the \`accessToken\` value from the \`data\` object in the response.\n` +
@@ -108,9 +110,9 @@ async function bootstrap(): Promise<void> {
       `5. Close the dialog. All 🔒 padlocked endpoints now include \`Authorization: Bearer <token>\` automatically.`;
 
     const swaggerConfig = new DocumentBuilder()
-      .setTitle(appName)
+      .setTitle(appIdentity.name)
       .setDescription(swaggerDescription)
-      .setVersion(appVersion)
+      .setVersion(appIdentity.version)
       .addBearerAuth(
         {
           type: 'http',
@@ -135,7 +137,7 @@ async function bootstrap(): Promise<void> {
         tagsSorter: 'alpha',
         operationsSorter: 'alpha',
       },
-      customSiteTitle: `${appName} – API Docs`,
+      customSiteTitle: `${appIdentity.name} – API Docs`,
     });
 
     logger.log(`📚 Swagger Docs:  http://localhost:${port}/api/docs`);

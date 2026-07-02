@@ -7,6 +7,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { type RegisterDto } from './dto/register.dto';
 import { type LoginDto } from './dto/login.dto';
+import { type ForgotPasswordDto } from './dto/forgot-password.dto';
+import { type ResetPasswordDto } from './dto/reset-password.dto';
 import { type AuthUser, type SafeUser, type TokenPair } from './interfaces/auth.interfaces';
 
 const mockSafeUser: SafeUser = {
@@ -38,6 +40,8 @@ const mockAuthService = {
   logout: jest.fn(),
   logoutAll: jest.fn(),
   googleLogin: jest.fn(),
+  forgotPassword: jest.fn(),
+  resetPassword: jest.fn(),
 };
 
 const mockConfigService = {
@@ -138,6 +142,34 @@ describe('AuthController', () => {
       expect(result.data.user).toEqual(mockSafeUser);
       // Refresh token must NOT appear in the response body
       expect(JSON.stringify(result)).not.toContain(mockTokenPair.refreshToken);
+    });
+  });
+
+  describe('forgotPassword()', () => {
+    it('should delegate to authService.forgotPassword and return the result', async () => {
+      const dto: ForgotPasswordDto = { email: 'user@example.com' };
+      const expected = {
+        message: 'If an account with that email exists, a password reset link has been sent.',
+      };
+      mockAuthService.forgotPassword.mockResolvedValueOnce(expected);
+
+      const result = await controller.forgotPassword(dto);
+
+      expect(mockAuthService.forgotPassword).toHaveBeenCalledWith(dto);
+      expect(result).toEqual(expected);
+    });
+  });
+
+  describe('resetPassword()', () => {
+    it('should delegate to authService.resetPassword and return the result', async () => {
+      const dto: ResetPasswordDto = { token: 'raw-token', password: 'NewSecurePass123' };
+      const expected = { message: 'Password has been reset successfully' };
+      mockAuthService.resetPassword.mockResolvedValueOnce(expected);
+
+      const result = await controller.resetPassword(dto);
+
+      expect(mockAuthService.resetPassword).toHaveBeenCalledWith(dto);
+      expect(result).toEqual(expected);
     });
   });
 

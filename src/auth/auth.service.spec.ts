@@ -6,18 +6,27 @@ import { Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../database/prisma.service';
+import { SettingsService } from '../settings/settings.service';
+import { MailService } from '../mail/mail.service';
 import { type RegisterDto } from './dto/register.dto';
 import { type LoginDto } from './dto/login.dto';
+import { type ForgotPasswordDto } from './dto/forgot-password.dto';
+import { type ResetPasswordDto } from './dto/reset-password.dto';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('$2b$12$hashedpassword'),
   compare: jest.fn().mockResolvedValue(true),
 }));
 
+const mockSettingsService = {
+  getSettings: jest.fn().mockResolvedValue({ allowRegistration: true, enableGoogleLogin: true }),
+};
+
+const mockMailService = {
+  sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+};
+
 const mockPrisma = {
-  appSetting: {
-    findUnique: jest.fn(),
-  },
   user: {
     findFirst: jest.fn(),
     findUnique: jest.fn(),
@@ -29,6 +38,11 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+  },
+  passwordResetToken: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
   },
   $transaction: jest.fn().mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops)),
 };
@@ -81,11 +95,18 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: SettingsService, useValue: mockSettingsService },
+        { provide: MailService, useValue: mockMailService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     jest.clearAllMocks();
+    mockSettingsService.getSettings.mockResolvedValue({
+      allowRegistration: true,
+      enableGoogleLogin: true,
+    });
+    mockMailService.sendPasswordResetEmail.mockResolvedValue(undefined);
 
     // Restore default bcrypt mock after each clear
     (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$12$hashedpassword');
@@ -119,7 +140,10 @@ describe('AuthService', () => {
     };
 
     it('should create a user and return SafeUser when registration is allowed', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ allowRegistration: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.create.mockResolvedValueOnce({
         id: 2,
         email: 'new@example.com',
@@ -132,10 +156,7 @@ describe('AuthService', () => {
 
       const result = await service.register(dto);
 
-      expect(mockPrisma.appSetting.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
-        select: { allowRegistration: true },
-      });
+      expect(mockSettingsService.getSettings).toHaveBeenCalledTimes(1);
       expect(bcrypt.hash).toHaveBeenCalledWith('SecurePass123', 10);
       expect(mockPrisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -147,7 +168,10 @@ describe('AuthService', () => {
     });
 
     it('should throw ForbiddenException when allowRegistration is false', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ allowRegistration: false });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: false,
+        enableGoogleLogin: true,
+      });
 
       await expect(service.register(dto)).rejects.toThrow(
         new ForbiddenException('Registration is currently disabled'),
@@ -156,7 +180,10 @@ describe('AuthService', () => {
     });
 
     it('should normalise email to lowercase before creating', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ allowRegistration: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.create.mockResolvedValueOnce({
         id: 3,
         email: 'new@example.com',
@@ -371,7 +398,10 @@ describe('AuthService', () => {
     };
 
     it('should create a new user when no matching record exists', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.findFirst.mockResolvedValueOnce(null);
       mockPrisma.user.create.mockResolvedValueOnce({
         id: 5,
@@ -400,7 +430,10 @@ describe('AuthService', () => {
     });
 
     it('should link googleId when existing user found by email without googleId', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.findFirst.mockResolvedValueOnce({
         ...baseUser,
         googleId: null,
@@ -418,7 +451,10 @@ describe('AuthService', () => {
     });
 
     it('should throw ForbiddenException when enableGoogleLogin is false', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: false });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: false,
+      });
 
       await expect(service.googleLogin(googleProfile, 'Chrome')).rejects.toThrow(
         new ForbiddenException('Google login is currently disabled'),
@@ -426,7 +462,10 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException when matched user is inactive', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.findFirst.mockResolvedValueOnce({
         ...baseUser,
         isActive: false,
@@ -436,6 +475,120 @@ describe('AuthService', () => {
       await expect(service.googleLogin(googleProfile, 'Chrome')).rejects.toThrow(
         new UnauthorizedException('Account is deactivated'),
       );
+    });
+  });
+
+  describe('forgotPassword()', () => {
+    const dto: ForgotPasswordDto = { email: 'User@Example.com' };
+
+    it('creates a reset token and emails the link when the user exists', async () => {
+      mockPrisma.user.findFirst.mockResolvedValueOnce({ id: 1, email: 'user@example.com' });
+      mockPrisma.passwordResetToken.create.mockResolvedValueOnce({ id: 1 });
+
+      const result = await service.forgotPassword(dto);
+
+      expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
+        where: { email: 'user@example.com', deletedAt: null, isActive: true },
+        select: { id: true, email: true },
+      });
+      expect(mockPrisma.passwordResetToken.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ userId: 1, expiresAt: expect.any(Date) }),
+        }),
+      );
+      expect(mockMailService.sendPasswordResetEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        expect.stringContaining('/reset-password?token='),
+      );
+      expect(result.message).toBe(
+        'If an account with that email exists, a password reset link has been sent.',
+      );
+    });
+
+    it('returns the same generic message without creating a token when no user matches', async () => {
+      mockPrisma.user.findFirst.mockResolvedValueOnce(null);
+
+      const result = await service.forgotPassword(dto);
+
+      expect(mockPrisma.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(mockMailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+      expect(result.message).toBe(
+        'If an account with that email exists, a password reset link has been sent.',
+      );
+    });
+  });
+
+  describe('resetPassword()', () => {
+    const dto: ResetPasswordDto = { token: 'raw-reset-token', password: 'NewSecurePass123' };
+
+    const validStoredToken = {
+      id: 5,
+      userId: 1,
+      expiresAt: new Date(Date.now() + 10 * 60_000),
+      usedAt: null,
+    };
+
+    it('updates the password, marks the token used, and revokes all sessions', async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValueOnce(validStoredToken);
+      mockPrisma.user.update.mockResolvedValueOnce({});
+      mockPrisma.passwordResetToken.update.mockResolvedValueOnce({});
+      mockPrisma.refreshToken.updateMany.mockResolvedValueOnce({ count: 2 });
+
+      const result = await service.resetPassword(dto);
+
+      expect(bcrypt.hash).toHaveBeenCalledWith('NewSecurePass123', 10);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: expect.objectContaining({
+          password: '$2b$12$hashedpassword',
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        }),
+        select: { id: true },
+      });
+      expect(mockPrisma.passwordResetToken.update).toHaveBeenCalledWith({
+        where: { id: 5 },
+        data: { usedAt: expect.any(Date) },
+        select: { id: true },
+      });
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 1, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(result.message).toBe('Password has been reset successfully');
+    });
+
+    it('throws UnauthorizedException when the token does not exist', async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValueOnce(null);
+
+      await expect(service.resetPassword(dto)).rejects.toThrow(
+        new UnauthorizedException('Invalid or expired password reset token'),
+      );
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('throws UnauthorizedException when the token was already used', async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValueOnce({
+        ...validStoredToken,
+        usedAt: new Date('2026-01-01'),
+      });
+
+      await expect(service.resetPassword(dto)).rejects.toThrow(
+        new UnauthorizedException('Invalid or expired password reset token'),
+      );
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('throws UnauthorizedException when the token has expired', async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValueOnce({
+        ...validStoredToken,
+        expiresAt: new Date(Date.now() - 1_000),
+      });
+
+      await expect(service.resetPassword(dto)).rejects.toThrow(
+        new UnauthorizedException('Invalid or expired password reset token'),
+      );
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
     });
   });
 });

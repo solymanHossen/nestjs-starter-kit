@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { SettingsModule } from '../settings/settings.module';
 
 function parseExpiryToSeconds(str: string): number {
   const units: Record<string, number> = { s: 1, m: 60, h: 3_600, d: 86_400 };
@@ -16,6 +17,7 @@ function parseExpiryToSeconds(str: string): number {
 
 @Module({
   imports: [
+    SettingsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],

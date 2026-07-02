@@ -1,17 +1,11 @@
 import { z } from 'zod';
+import { PasswordSchema } from './password.schema';
 
 export const RegisterSchema = z
   .object({
     email: z.string().email(),
     name: z.string().max(100).optional(),
-    password: z
-      .string()
-      .min(8)
-      .max(72)
-      .regex(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-        'password must contain at least one lowercase letter, one uppercase letter, and one digit',
-      ),
+    password: PasswordSchema,
   })
   // Reject unrecognized fields (e.g. a client-supplied `role`) instead of the
   // Zod object default of silently stripping them — matches the whitelist +
