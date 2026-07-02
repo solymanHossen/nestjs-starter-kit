@@ -5,6 +5,7 @@ import { Role } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { GoogleProfile, JwtAccessPayload, SafeUser, TokenPair } from './interfaces/auth.interfaces';
@@ -20,6 +21,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly settingsService: SettingsService,
   ) {
     this.bcryptRounds = this.configService.get<number>('BCRYPT_ROUNDS') ?? 12;
     this.maxFailedAttempts = this.configService.get<number>('MAX_FAILED_ATTEMPTS') ?? 5;
@@ -28,12 +30,9 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto): Promise<{ message: string; data: SafeUser }> {
-    const settings = await this.prisma.appSetting.findUnique({
-      where: { id: 1 },
-      select: { allowRegistration: true },
-    });
+    const settings = await this.settingsService.getSettings();
 
-    if (settings && !settings.allowRegistration) {
+    if (!settings.allowRegistration) {
       throw new ForbiddenException('Registration is currently disabled');
     }
 
@@ -223,12 +222,9 @@ export class AuthService {
     profile: GoogleProfile,
     deviceInfo: string,
   ): Promise<{ message: string; data: SafeUser; tokens: TokenPair }> {
-    const settings = await this.prisma.appSetting.findUnique({
-      where: { id: 1 },
-      select: { enableGoogleLogin: true },
-    });
+    const settings = await this.settingsService.getSettings();
 
-    if (settings && !settings.enableGoogleLogin) {
+    if (!settings.enableGoogleLogin) {
       throw new ForbiddenException('Google login is currently disabled');
     }
 

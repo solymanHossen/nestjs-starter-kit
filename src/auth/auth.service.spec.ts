@@ -6,6 +6,7 @@ import { Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../database/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { type RegisterDto } from './dto/register.dto';
 import { type LoginDto } from './dto/login.dto';
 
@@ -14,10 +15,11 @@ jest.mock('bcrypt', () => ({
   compare: jest.fn().mockResolvedValue(true),
 }));
 
+const mockSettingsService = {
+  getSettings: jest.fn().mockResolvedValue({ allowRegistration: true, enableGoogleLogin: true }),
+};
+
 const mockPrisma = {
-  appSetting: {
-    findUnique: jest.fn(),
-  },
   user: {
     findFirst: jest.fn(),
     findUnique: jest.fn(),
@@ -81,11 +83,16 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: SettingsService, useValue: mockSettingsService },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     jest.clearAllMocks();
+    mockSettingsService.getSettings.mockResolvedValue({
+      allowRegistration: true,
+      enableGoogleLogin: true,
+    });
 
     // Restore default bcrypt mock after each clear
     (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$12$hashedpassword');
@@ -119,7 +126,10 @@ describe('AuthService', () => {
     };
 
     it('should create a user and return SafeUser when registration is allowed', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ allowRegistration: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.create.mockResolvedValueOnce({
         id: 2,
         email: 'new@example.com',
@@ -132,10 +142,7 @@ describe('AuthService', () => {
 
       const result = await service.register(dto);
 
-      expect(mockPrisma.appSetting.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
-        select: { allowRegistration: true },
-      });
+      expect(mockSettingsService.getSettings).toHaveBeenCalledTimes(1);
       expect(bcrypt.hash).toHaveBeenCalledWith('SecurePass123', 10);
       expect(mockPrisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -147,7 +154,10 @@ describe('AuthService', () => {
     });
 
     it('should throw ForbiddenException when allowRegistration is false', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ allowRegistration: false });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: false,
+        enableGoogleLogin: true,
+      });
 
       await expect(service.register(dto)).rejects.toThrow(
         new ForbiddenException('Registration is currently disabled'),
@@ -156,7 +166,10 @@ describe('AuthService', () => {
     });
 
     it('should normalise email to lowercase before creating', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ allowRegistration: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.create.mockResolvedValueOnce({
         id: 3,
         email: 'new@example.com',
@@ -371,7 +384,10 @@ describe('AuthService', () => {
     };
 
     it('should create a new user when no matching record exists', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.findFirst.mockResolvedValueOnce(null);
       mockPrisma.user.create.mockResolvedValueOnce({
         id: 5,
@@ -400,7 +416,10 @@ describe('AuthService', () => {
     });
 
     it('should link googleId when existing user found by email without googleId', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.findFirst.mockResolvedValueOnce({
         ...baseUser,
         googleId: null,
@@ -418,7 +437,10 @@ describe('AuthService', () => {
     });
 
     it('should throw ForbiddenException when enableGoogleLogin is false', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: false });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: false,
+      });
 
       await expect(service.googleLogin(googleProfile, 'Chrome')).rejects.toThrow(
         new ForbiddenException('Google login is currently disabled'),
@@ -426,7 +448,10 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException when matched user is inactive', async () => {
-      mockPrisma.appSetting.findUnique.mockResolvedValueOnce({ enableGoogleLogin: true });
+      mockSettingsService.getSettings.mockResolvedValueOnce({
+        allowRegistration: true,
+        enableGoogleLogin: true,
+      });
       mockPrisma.user.findFirst.mockResolvedValueOnce({
         ...baseUser,
         isActive: false,
