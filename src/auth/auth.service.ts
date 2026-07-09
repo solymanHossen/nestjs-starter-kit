@@ -210,7 +210,7 @@ export class AuthService {
     return { message: 'Token refreshed successfully', tokens };
   }
 
-  async logout(rawToken: string): Promise<{ message: string }> {
+  async logout(rawToken: string): Promise<{ message: string; data: null }> {
     const tokenHash = this.hashToken(rawToken);
 
     await this.prisma.refreshToken.updateMany({
@@ -218,16 +218,19 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    return { message: 'Logged out successfully' };
+    // Explicit `data: null` — see TransformInterceptor: without it, its
+    // fallback would nest this whole { message } object inside itself as
+    // `data`, duplicating the message in the response body.
+    return { message: 'Logged out successfully', data: null };
   }
 
-  async logoutAll(userId: number): Promise<{ message: string }> {
+  async logoutAll(userId: number): Promise<{ message: string; data: null }> {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
 
-    return { message: 'All sessions revoked successfully' };
+    return { message: 'All sessions revoked successfully', data: null };
   }
 
   async googleLogin(
@@ -312,11 +315,15 @@ export class AuthService {
     return { message: 'Google login successful', data: safeUser, tokens };
   }
 
-  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string; data: null }> {
     // Identical response whether or not the email is registered — prevents
-    // account enumeration via this endpoint.
+    // account enumeration via this endpoint. `data: null` is explicit (not
+    // omitted) — see TransformInterceptor: an object with `message` but no
+    // `data` key falls back to nesting the whole object inside itself as
+    // `data`, duplicating the message in the response body.
     const genericResponse = {
       message: 'If an account with that email exists, a password reset link has been sent.',
+      data: null,
     };
 
     const user = await this.prisma.user.findFirst({
@@ -348,7 +355,7 @@ export class AuthService {
     return genericResponse;
   }
 
-  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
+  async resetPassword(dto: ResetPasswordDto): Promise<{ message: string; data: null }> {
     const tokenHash = this.hashToken(dto.token);
 
     const storedToken = await this.prisma.passwordResetToken.findUnique({
@@ -396,7 +403,7 @@ export class AuthService {
       }),
     ]);
 
-    return { message: 'Password has been reset successfully' };
+    return { message: 'Password has been reset successfully', data: null };
   }
 
   private async recordFailedAttempt(userId: number): Promise<void> {

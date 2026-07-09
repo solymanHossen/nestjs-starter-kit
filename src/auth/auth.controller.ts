@@ -111,7 +111,7 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Validation failed' })
   async forgotPassword(
     @Body(new ZodValidationPipe(ForgotPasswordSchema)) dto: ForgotPasswordDto,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     return this.authService.forgotPassword(dto);
   }
 
@@ -126,7 +126,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired reset token' })
   async resetPassword(
     @Body(new ZodValidationPipe(ResetPasswordSchema)) dto: ResetPasswordDto,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     return this.authService.resetPassword(dto);
   }
 
@@ -163,7 +163,7 @@ export class AuthController {
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     const rawToken = (req.cookies as Record<string, string | undefined>)['refresh_token'];
 
     if (rawToken) {
@@ -171,7 +171,7 @@ export class AuthController {
     }
 
     this.clearRefreshTokenCookie(res);
-    return { message: 'Logged out successfully' };
+    return { message: 'Logged out successfully', data: null };
   }
 
   @Post('logout-all')
@@ -182,7 +182,7 @@ export class AuthController {
   async logoutAll(
     @CurrentUser() user: AuthUser,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     const result = await this.authService.logoutAll(user.id);
     this.clearRefreshTokenCookie(res);
     return result;

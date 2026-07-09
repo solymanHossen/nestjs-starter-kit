@@ -104,7 +104,7 @@ describe('StorageController', () => {
       const result = await controller.deleteFile('general', 'abc.png');
 
       expect(mockStorageService.remove).toHaveBeenCalledWith('general/abc.png');
-      expect(result).toEqual({ message: 'File deleted successfully' });
+      expect(result).toEqual({ message: 'File deleted successfully', data: null });
     });
   });
 });

@@ -119,8 +119,11 @@ export class StorageController {
   async deleteFile(
     @Param('folder') folder: string,
     @Param('filename') filename: string,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     await this.storageService.remove(`${folder}/${filename}`);
-    return { message: 'File deleted successfully' };
+    // Explicit `data: null` — without it, TransformInterceptor's fallback
+    // (`body?.data ?? res`) would nest this entire { message } object inside
+    // itself as `data`, duplicating the message in the response body.
+    return { message: 'File deleted successfully', data: null };
   }
 }
