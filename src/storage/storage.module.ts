@@ -27,8 +27,10 @@ import { S3StorageProvider } from './providers/s3-storage.provider';
           limits: { fileSize: maxSizeMb * 1024 * 1024 },
           // Rejecting a disallowed MIME type here — before the body is fully read — saves
           // bandwidth and memory that StorageService's own check (defense-in-depth) can't.
+          // Fails closed: an empty allow-list rejects everything rather than disabling
+          // the check (see the matching comment in StorageService.assertValidFile).
           fileFilter: (_request, file, callback) => {
-            if (allowedMimeTypes.size > 0 && !allowedMimeTypes.has(file.mimetype)) {
+            if (!allowedMimeTypes.has(file.mimetype)) {
               callback(
                 new UnsupportedMediaTypeException(`MIME type "${file.mimetype}" is not permitted`),
                 false,

@@ -101,17 +101,17 @@ export class AuthService {
     }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      const remainingMs = user.lockedUntil.getTime() - Date.now();
-      const remainingMinutes = Math.ceil(remainingMs / 60_000);
-      throw new UnauthorizedException(
-        `Account temporarily locked. Try again in approximately ${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'}.`,
-      );
+      // Deliberately the same message/branch-shape as an invalid password
+      // (see the `!passwordValid` branch below) — telling a caller "this
+      // account exists and is locked" is an enumeration channel, same class
+      // of leak this file already avoids in forgotPassword() below.
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const passwordValid = await bcrypt.compare(dto.password, user.password ?? '');
 
     if (!passwordValid) {
-      await this.recordFailedAttempt(user.id, user.failedLoginAttempts);
+      await this.recordFailedAttempt(user.id);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -360,6 +360,21 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired password reset token');
     }
 
+    // Every other gate that issues/consumes credentials (login, refresh,
+    // googleLogin, JwtStrategy) re-checks deletedAt/isActive against the
+    // *current* user row rather than trusting a snapshot taken when the
+    // token was issued. This did not: a token requested just before a
+    // soft-delete/deactivation could still be used to set a password
+    // afterward. Close that gap here too.
+    const user = await this.prisma.user.findFirst({
+      where: { id: storedToken.userId, deletedAt: null, isActive: true },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired password reset token');
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, this.bcryptRounds);
 
     await this.prisma.$transaction([
@@ -384,18 +399,24 @@ export class AuthService {
     return { message: 'Password has been reset successfully' };
   }
 
-  private async recordFailedAttempt(userId: number, currentAttempts: number): Promise<void> {
-    const attempts = currentAttempts + 1;
-    const shouldLock = attempts >= this.maxFailedAttempts;
-
-    await this.prisma.user.update({
+  private async recordFailedAttempt(userId: number): Promise<void> {
+    // Atomic `increment` — not a read-then-write of a previously-fetched count — so
+    // concurrent failed attempts against the same account (e.g. a parallel
+    // brute-force burst) can't under-count via a lost-update race and slip
+    // past the lockout threshold.
+    const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: {
-        failedLoginAttempts: attempts,
-        lockedUntil: shouldLock ? new Date(Date.now() + this.lockDurationMs) : undefined,
-      },
-      select: { id: true },
+      data: { failedLoginAttempts: { increment: 1 } },
+      select: { failedLoginAttempts: true },
     });
+
+    if (updated.failedLoginAttempts >= this.maxFailedAttempts) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { lockedUntil: new Date(Date.now() + this.lockDurationMs) },
+        select: { id: true },
+      });
+    }
   }
 
   private async generateTokens(userId: number, email: string, role: Role): Promise<TokenPair> {

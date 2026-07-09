@@ -176,11 +176,16 @@ export const envSchema = z
     // payload is fully buffered into memory.
     STORAGE_MAX_FILE_SIZE_MB: z.coerce.number().int().min(1).max(1024).default(10),
 
-    // Comma-separated MIME allow-list applied at the Multer layer. An empty
-    // string disables the check — not recommended outside of trusted internal tools.
-    STORAGE_ALLOWED_MIME_TYPES: z
-      .string()
-      .default('image/jpeg,image/png,image/webp,image/gif,application/pdf'),
+    // Comma-separated MIME allow-list applied at the Multer layer and again
+    // (defense-in-depth) in StorageService. Deliberately fails closed: an
+    // empty/unset value falls back to the safe image+PDF default below
+    // rather than disabling the check, so an operator can't accidentally
+    // open uploads to arbitrary file types (e.g. .html, enabling stored XSS
+    // via the public file-stream route) by leaving this blank.
+    STORAGE_ALLOWED_MIME_TYPES: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().default('image/jpeg,image/png,image/webp,image/gif,application/pdf'),
+    ),
 
     STORAGE_AWS_ACCESS_KEY_ID: z.preprocess(
       (v) => (v === '' ? undefined : v),
