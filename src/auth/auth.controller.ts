@@ -65,7 +65,17 @@ export class AuthController {
   @Throttle({ [AUTH_THROTTLE_KEY]: { limit: 10, ttl: 900_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
-  @ApiBody({ schema: z.toJSONSchema(LoginSchema) as unknown as ApiBodySchema })
+  @ApiBody({
+    schema: z.toJSONSchema(LoginSchema) as unknown as ApiBodySchema,
+    examples: {
+      superAdmin: {
+        summary: 'Seeded super-admin (dev only)',
+        description:
+          'Matches the SUPER_ADMIN account created by `npm run prisma:seed` in development — never a real credential.',
+        value: { email: 'superadmin@example.com', password: 'Password123' },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: 'Login successful — refresh token set in httpOnly cookie',
