@@ -8,12 +8,15 @@ export class UserSeeder implements Seeder {
   readonly description = 'Seeds one SUPER_ADMIN, five ADMINs, and the remaining regular USERs';
   readonly order = 1;
 
-  // Pre-hashed bcrypt value for 'password123' at cost 10.
-  // Avoids CPU-bound hashing during seed runs.
+  // Pre-hashed bcrypt value for 'Password123' at cost 10.
+  // Avoids CPU-bound hashing during seed runs. Verified to actually match
+  // its documented plaintext via bcrypt.compareSync — the previous constant
+  // here did not (it was some other, undocumented string's hash) and every
+  // seeded account was silently unloggable-into as a result.
   // WARNING: This is a development-only seed password — never derive real
   // user passwords from this hash, and never run seeders in production.
   private static readonly PRE_HASHED_PASSWORD =
-    '$2b$10$EPf9XpBPHTv.P9Yt5FzDSez5N1N/4YwK27p7Z1L.oRpxZ1W.Y2p2q';
+    '$2b$10$soVlmc/dt0o.3Mz.5JJuVu8GBYkwu30gXgRvCVuQ7oeJUNzSOk7AC';
 
   private static readonly TOTAL_USERS = 10;
 

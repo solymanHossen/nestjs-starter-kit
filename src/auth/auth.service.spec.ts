@@ -233,48 +233,60 @@ describe('AuthService', () => {
       expect(bcrypt.hash).toHaveBeenCalledWith('timing_safe_dummy_comparison_value', 10);
     });
 
-    it('should throw UnauthorizedException when password is invalid and increment failedLoginAttempts', async () => {
+    it('should throw UnauthorizedException when password is invalid and atomically increment failedLoginAttempts', async () => {
       (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
       mockPrisma.user.findFirst.mockResolvedValueOnce({ ...baseUser, failedLoginAttempts: 2 });
-      mockPrisma.user.update.mockResolvedValueOnce({});
+      mockPrisma.user.update.mockResolvedValueOnce({ failedLoginAttempts: 3 });
 
       await expect(service.login(dto, 'agent')).rejects.toThrow(UnauthorizedException);
 
+      // Atomic `increment`, not a read-then-write of a previously-fetched
+      // count — closes the lost-update race under concurrent attempts.
+      expect(mockPrisma.user.update).toHaveBeenCalledTimes(1);
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 1 },
-        data: expect.objectContaining({ failedLoginAttempts: 3 }),
-        select: { id: true },
+        data: { failedLoginAttempts: { increment: 1 } },
+        select: { failedLoginAttempts: true },
       });
     });
 
-    it('should set lockedUntil when failedLoginAttempts reaches the threshold', async () => {
+    it('should set lockedUntil in a follow-up update once the atomic increment reaches the threshold', async () => {
       (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
       mockPrisma.user.findFirst.mockResolvedValueOnce({
         ...baseUser,
         failedLoginAttempts: 4, // 5th attempt triggers lock
       });
-      mockPrisma.user.update.mockResolvedValueOnce({});
+      mockPrisma.user.update
+        .mockResolvedValueOnce({ failedLoginAttempts: 5 })
+        .mockResolvedValueOnce({});
 
       await expect(service.login(dto, 'agent')).rejects.toThrow(UnauthorizedException);
 
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+      expect(mockPrisma.user.update).toHaveBeenNthCalledWith(1, {
         where: { id: 1 },
-        data: expect.objectContaining({
-          failedLoginAttempts: 5,
-          lockedUntil: expect.any(Date),
-        }),
+        data: { failedLoginAttempts: { increment: 1 } },
+        select: { failedLoginAttempts: true },
+      });
+      expect(mockPrisma.user.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 1 },
+        data: { lockedUntil: expect.any(Date) },
         select: { id: true },
       });
     });
 
-    it('should throw UnauthorizedException before password check when account is locked', async () => {
+    it('should throw a generic UnauthorizedException before the password check when account is locked', async () => {
       const futureDate = new Date(Date.now() + 10 * 60_000);
       mockPrisma.user.findFirst.mockResolvedValueOnce({
         ...baseUser,
         lockedUntil: futureDate,
       });
 
-      await expect(service.login(dto, 'agent')).rejects.toThrow(UnauthorizedException);
+      // Deliberately the same message as an invalid password — a distinct
+      // "this account is locked" message would leak account existence + lock
+      // state to a prober.
+      await expect(service.login(dto, 'agent')).rejects.toThrow(
+        new UnauthorizedException('Invalid credentials'),
+      );
       expect(bcrypt.compare).not.toHaveBeenCalled();
     });
 
@@ -530,11 +542,17 @@ describe('AuthService', () => {
 
     it('updates the password, marks the token used, and revokes all sessions', async () => {
       mockPrisma.passwordResetToken.findUnique.mockResolvedValueOnce(validStoredToken);
+      mockPrisma.user.findFirst.mockResolvedValueOnce({ id: 1 });
       mockPrisma.user.update.mockResolvedValueOnce({});
       mockPrisma.passwordResetToken.update.mockResolvedValueOnce({});
       mockPrisma.refreshToken.updateMany.mockResolvedValueOnce({ count: 2 });
 
       const result = await service.resetPassword(dto);
+
+      expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
+        where: { id: 1, deletedAt: null, isActive: true },
+        select: { id: true },
+      });
 
       expect(bcrypt.hash).toHaveBeenCalledWith('NewSecurePass123', 10);
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
@@ -584,6 +602,18 @@ describe('AuthService', () => {
         ...validStoredToken,
         expiresAt: new Date(Date.now() - 1_000),
       });
+
+      await expect(service.resetPassword(dto)).rejects.toThrow(
+        new UnauthorizedException('Invalid or expired password reset token'),
+      );
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('throws UnauthorizedException when the user was soft-deleted or deactivated after the token was issued', async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValueOnce(validStoredToken);
+      // findFirst is scoped to deletedAt: null, isActive: true — a deleted/deactivated
+      // user simply doesn't match and resolves to null, same as a real Prisma query.
+      mockPrisma.user.findFirst.mockResolvedValueOnce(null);
 
       await expect(service.resetPassword(dto)).rejects.toThrow(
         new UnauthorizedException('Invalid or expired password reset token'),

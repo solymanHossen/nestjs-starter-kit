@@ -36,6 +36,8 @@ model RefreshToken {
   createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
   @@map("refresh_tokens")
 }
 
@@ -49,6 +51,7 @@ model PasswordResetToken {
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([userId])
+  @@index([expiresAt])
   @@map("password_reset_tokens")
 }
 

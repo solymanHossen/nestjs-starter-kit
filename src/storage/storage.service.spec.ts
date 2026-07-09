@@ -101,6 +101,32 @@ describe('StorageService', () => {
       await expect(service.save(file, 'general')).rejects.toThrow(UnsupportedMediaTypeException);
       expect(mockProvider.uploadFile).not.toHaveBeenCalled();
     });
+
+    it('fails closed (rejects everything) when STORAGE_ALLOWED_MIME_TYPES resolves to an empty allow-list', async () => {
+      const emptyAllowListConfig = {
+        get: jest.fn((key: string) => {
+          const configMap: Record<string, number | string> = {
+            STORAGE_MAX_FILE_SIZE_MB: 1,
+            STORAGE_ALLOWED_MIME_TYPES: '',
+          };
+          return configMap[key];
+        }),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          StorageService,
+          { provide: STORAGE_IO_TOKEN, useValue: mockProvider },
+          { provide: ConfigService, useValue: emptyAllowListConfig },
+        ],
+      }).compile();
+      const emptyAllowListService = module.get<StorageService>(StorageService);
+      const file = buildFile();
+
+      await expect(emptyAllowListService.save(file, 'general')).rejects.toThrow(
+        UnsupportedMediaTypeException,
+      );
+      expect(mockProvider.uploadFile).not.toHaveBeenCalled();
+    });
   });
 
   describe('remove', () => {

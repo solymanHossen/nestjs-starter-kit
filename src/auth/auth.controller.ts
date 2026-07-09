@@ -65,7 +65,17 @@ export class AuthController {
   @Throttle({ [AUTH_THROTTLE_KEY]: { limit: 10, ttl: 900_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
-  @ApiBody({ schema: z.toJSONSchema(LoginSchema) as unknown as ApiBodySchema })
+  @ApiBody({
+    schema: z.toJSONSchema(LoginSchema) as unknown as ApiBodySchema,
+    examples: {
+      superAdmin: {
+        summary: 'Seeded super-admin (dev only)',
+        description:
+          'Matches the SUPER_ADMIN account created by `npm run prisma:seed` in development — never a real credential.',
+        value: { email: 'superadmin@example.com', password: 'Password123' },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: 'Login successful — refresh token set in httpOnly cookie',
@@ -101,7 +111,7 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Validation failed' })
   async forgotPassword(
     @Body(new ZodValidationPipe(ForgotPasswordSchema)) dto: ForgotPasswordDto,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     return this.authService.forgotPassword(dto);
   }
 
@@ -116,7 +126,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired reset token' })
   async resetPassword(
     @Body(new ZodValidationPipe(ResetPasswordSchema)) dto: ResetPasswordDto,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     return this.authService.resetPassword(dto);
   }
 
@@ -153,7 +163,7 @@ export class AuthController {
   async logout(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     const rawToken = (req.cookies as Record<string, string | undefined>)['refresh_token'];
 
     if (rawToken) {
@@ -161,7 +171,7 @@ export class AuthController {
     }
 
     this.clearRefreshTokenCookie(res);
-    return { message: 'Logged out successfully' };
+    return { message: 'Logged out successfully', data: null };
   }
 
   @Post('logout-all')
@@ -172,7 +182,7 @@ export class AuthController {
   async logoutAll(
     @CurrentUser() user: AuthUser,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; data: null }> {
     const result = await this.authService.logoutAll(user.id);
     this.clearRefreshTokenCookie(res);
     return result;

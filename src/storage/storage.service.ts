@@ -60,9 +60,15 @@ export class StorageService {
       );
     }
 
-    if (this.allowedMimeTypes.size > 0 && !this.allowedMimeTypes.has(file.mimetype)) {
+    // Fails closed: an empty allow-list (STORAGE_ALLOWED_MIME_TYPES resolved
+    // to nothing) rejects every upload rather than skipping the check —
+    // the env schema already defaults this to a safe list, so an empty set
+    // here means misconfiguration, not "no restriction intended".
+    if (!this.allowedMimeTypes.has(file.mimetype)) {
       throw new UnsupportedMediaTypeException(
-        `MIME type "${file.mimetype}" is not permitted. Allowed types: ${[...this.allowedMimeTypes].join(', ')}`,
+        this.allowedMimeTypes.size > 0
+          ? `MIME type "${file.mimetype}" is not permitted. Allowed types: ${[...this.allowedMimeTypes].join(', ')}`
+          : 'File uploads are not permitted: no allowed MIME types are configured.',
       );
     }
   }
